@@ -2,6 +2,8 @@
 
 rexq collects the questions Claude Code agents leave for you (decisions, vetoes, things to do by hand, leftovers) into one panel inside [Rex](https://www.superlogical.com/rex). A Claude `Stop` hook sends each final message to Haiku through `claude -p` on your own login, stores the items it finds in SQLite, and a floating Rex panel lists them. From the panel you answer, snooze, mark done, or jump to the agent.
 
+![The Agent questions panel floating over a Rex tab: questions from two agents, one snoozed, with quick answers for the selected one](assets/panel.png)
+
 ## Requirements
 
 - macOS only: it is built and tested there.
