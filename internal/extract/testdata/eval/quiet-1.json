@@ -1,1 +1,0 @@
-{"name": "quiet-1", "prompt": "fix the flaky test", "message": "Fixed the race in cache_test.go by waiting on the done channel. `go test -race ./...` passes 10 times in a row. Nothing else changed.", "min": 0, "max": 0, "kinds": []}

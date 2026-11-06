@@ -5,6 +5,7 @@ package extract
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,7 +17,7 @@ import (
 	"github.com/tfcace/rexq/internal/filter"
 )
 
-// evalCase is one testdata/eval file: an agent's final message and what
+// evalCase is one eval case file: an agent's final message and what
 // extracting it should give.
 type evalCase struct {
 	Name, Prompt, Message string
@@ -37,15 +38,35 @@ type evalCase struct {
 	Kept       []int64
 }
 
-// TestEval runs the real model on final messages shaped like real sessions and
-// checks it finds what a person would. Each case costs a `claude -p` call
-// per run. EVAL_RUNS repeats every case and reports pass rates.
+// TestEval runs the real model on agents' final messages and checks it finds
+// what a person would. Each case costs a `claude -p` call per run. EVAL_RUNS
+// repeats every case and reports pass rates.
 //
-// Run with: go test -tags eval ./internal/extract/ -run Eval -v
+// The cases are not in this repository, since they are taken from real
+// sessions. Point REXQ_EVAL_DIR at a directory of case files (*.json, searched
+// recursively):
+//
+//	REXQ_EVAL_DIR=path/to/evals go test -tags eval ./internal/extract/ -run Eval -v
 func TestEval(t *testing.T) {
-	files, _ := filepath.Glob("testdata/eval/*.json")
+	dir := os.Getenv("REXQ_EVAL_DIR")
+	if dir == "" {
+		t.Skip("set REXQ_EVAL_DIR to a directory of eval cases")
+	}
+	var files []string
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(p, ".json") {
+			files = append(files, p)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("reading eval cases: %v", err)
+	}
 	if len(files) == 0 {
-		t.Skip("no eval cases")
+		t.Fatalf("no *.json eval cases under %s", dir)
 	}
 	runs := 1
 	if s := os.Getenv("EVAL_RUNS"); s != "" {

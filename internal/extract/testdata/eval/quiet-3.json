@@ -1,9 +1,0 @@
-{
- "name": "quiet-3",
- "prompt": "switch the cache to size-based eviction",
- "message": "Done. The cache now evicts by total size instead of entry count, with a 64 MiB default, and `go test -race ./...` passes.\n\nWhy did the old code count entries at all? It predates the size tracking, so the count was the only measure it had.\n\nI'd keep an eye on the hit rate for a few days. If it drops, the 64 MiB default is the first thing to revisit. Let me know if anything looks off.",
- "min": 0,
- "max": 0,
- "kinds": [],
- "hard": true
-}
