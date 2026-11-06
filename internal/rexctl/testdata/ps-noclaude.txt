@@ -1,0 +1,7 @@
+    1     0 Ss   /sbin/launchd
+ 1553     1 S    /Applications/Rex.app/Contents/MacOS/rex-server
+ 2151  1478 S    /Applications/Example.app/Contents/Library/LoginItems/Example Helper.app/Contents/MacOS/Example Helper
+ 1561  1553 Ss+  /usr/bin/login
+ 1568  1561 S+   -zsh
+ 3356  1553 Ss+  /usr/bin/login
+ 3357  3356 S+   -zsh

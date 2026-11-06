@@ -1,0 +1,6 @@
+{"type":"user","sessionId":"s1","uuid":"u1","promptId":"p1","timestamp":"2026-10-15T13:00:00Z","cwd":"/p","gitBranch":"main","message":{"role":"user","content":"keep going"}}
+{"type":"assistant","sessionId":"s1","uuid":"a1","timestamp":"2026-10-15T13:01:00Z","cwd":"/p","gitBranch":"main","message":{"role":"assistant","content":[{"type":"text","text":"Looking at the code."}]}}
+{"type":"assistant","sessionId":"s1","uuid":"a2","timestamp":"2026-10-15T13:02:00Z","cwd":"/p","gitBranch":"main","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{}}]}}
+{"type":"user","sessionId":"s1","uuid":"u2","promptId":"p1","timestamp":"2026-10-15T13:02:05Z","cwd":"/p","gitBranch":"main","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}
+{"type":"assistant","sessionId":"s1","uuid":"a3","timestamp":"2026-10-15T13:03:00Z","cwd":"/p","gitBranch":"main","message":{"role":"assistant","content":[{"type":"text","text":"Done. Should I commit this?"}]}}
+{"type":"assistant","sessionId":"s1","uuid":"x1","isSidechain":true,"timestamp":"2026-10-15T13:04:00Z","message":{"role":"assistant","content":[{"type":"text","text":"subagent noise"}]}}

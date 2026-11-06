@@ -1,0 +1,17 @@
+{
+ "name": "veto-commit",
+ "prompt": "tighten up the export command before the release",
+ "min": 2,
+ "max": 3,
+ "kinds": [
+  "veto",
+  "decision"
+ ],
+ "note": "A cleanup report: raising the minimum Python version is a veto, and the closing question (commit, or the progress bar next) is a decision. The 'not done yet' list may come back as one leftover, hence max 3.",
+ "must": [
+  "commit",
+  "progress bar",
+  "minimum Python"
+ ],
+ "message": "The export command is in much better shape. Three changes:\n\n- **Large archives no longer run out of memory.** `export` used to read every record into a list before writing; it now streams them, so a 40 GB archive exports with flat memory use (about 60 MB peak in my test).\n- **Interrupted exports can resume.** A `.partial` marker records the last finished record, and `export --resume` picks up from there instead of starting over.\n- **Clearer errors for bad paths.** A missing destination folder now says which folder and offers `--create-dirs`, instead of a bare `FileNotFoundError`.\n\n**One change you may want to undo:** I raised the minimum Python version from 3.9 to 3.11 in `pyproject.toml`. Streaming uses `asyncio.TaskGroup`, which only exists from 3.11. If some of your users are still on 3.9 or 3.10, I can rewrite that part with plain threads instead.\n\nNot done yet:\n- Exports to S3 still buffer each file in memory.\n- `--resume` isn't tested on Windows.\n- The progress output is still one line per record, which floods the terminal.\n\nShould I commit this now, or replace the per-record output with a progress bar first?"
+}

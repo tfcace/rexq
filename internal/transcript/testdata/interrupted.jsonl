@@ -1,0 +1,3 @@
+{"type":"user","sessionId":"s5","uuid":"u1","promptId":"p1","timestamp":"2026-10-15T13:00:00Z","cwd":"/p","entrypoint":"cli","message":{"role":"user","content":"fix the build"}}
+{"type":"assistant","sessionId":"s5","uuid":"a1","timestamp":"2026-10-15T13:01:00Z","cwd":"/p","entrypoint":"cli","message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"Should I bump the Go version?"}]}}
+{"type":"user","sessionId":"s5","uuid":"u2","promptId":"p1","timestamp":"2026-10-15T13:01:10Z","cwd":"/p","entrypoint":"cli","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}

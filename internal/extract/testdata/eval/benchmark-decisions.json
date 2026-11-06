@@ -1,0 +1,18 @@
+{
+ "name": "benchmark-decisions",
+ "prompt": "run the migration dry run and tell me what's left",
+ "min": 4,
+ "max": 4,
+ "kinds": [
+  "action",
+  "decision"
+ ],
+ "note": "A long report whose 'Decisions for you' list holds an action (run against the staging snapshot by hand), a decision (the --since flag, 'your call') and a decision with a cost (the rented load test), plus the closing pull request question.",
+ "must": [
+  "staging",
+  "--since",
+  "load test",
+  "pull request"
+ ],
+ "message": "The dry run of the schema migration finished, and both rounds look good.\n\n**Round 1 (defaults):** 212 tables scanned, 9 need changes. The longest step, rebuilding the `orders` index, took 41 seconds on the copy of production I had. No locks were held longer than 2 seconds, which was the limit you set.\n\n**Round 2 (after the fixes):** I changed the order of steps so the two foreign keys are added after the backfill rather than before. That cut the total time from 6 minutes to 3 minutes 40 seconds, and the dry run no longer warns about long transactions.\n\nWhat else changed:\n- The migration now writes a plan file first, so you can read exactly what will run before anything touches the database.\n- Rollback steps are generated for every change, and I checked each one undoes its step on the test copy.\n- Two warnings about unused columns are now silenced with a comment explaining why.\n\n**Decisions for you:**\n1. **Run it against the staging snapshot yourself.** My sandbox couldn't reach the staging database, so I only tested on the local copy. Running `migrate --dry-run --target staging` once would confirm the timings hold on real data.\n2. **A `--since` flag.** Teams that migrate often asked to only check tables changed since a date. It's a small feature addition, so it's your call.\n3. **A proper load test.** Running the migration while replaying real traffic would show whether users notice it. That needs a rented machine for about an hour, around $4.\n\nNothing is merged yet. Want me to open a pull request from this branch?"
+}

@@ -1,0 +1,3 @@
+{"type":"user","sessionId":"s3","uuid":"u1","promptId":"p1","timestamp":"2026-10-15T13:00:00Z","cwd":"/p","entrypoint":"cli","message":{"role":"user","content":"run the tests"}}
+{"type":"assistant","sessionId":"s3","uuid":"a1","timestamp":"2026-10-15T13:01:00Z","cwd":"/p","entrypoint":"cli","message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"Should I run them all?"}]}}
+{"type":"assistant","sessionId":"s3","uuid":"a2","timestamp":"2026-10-15T13:01:01Z","cwd":"/p","entrypoint":"cli","message":{"id":"msg_1","role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{}}]}}

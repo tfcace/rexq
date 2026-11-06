@@ -1,0 +1,13 @@
+{"type":"permission-mode","permissionMode":"default","sessionId":"s2"}
+{"type":"user","sessionId":"s2","uuid":"u1","timestamp":"2026-10-15T13:00:00Z","cwd":"/p","gitBranch":"main","entrypoint":"cli","promptId":"p1","message":{"role":"user","content":"tidy the README"}}
+{"type":"attachment","sessionId":"s2","uuid":"at1","timestamp":"2026-10-15T13:00:01Z"}
+{"type":"assistant","sessionId":"s2","uuid":"a1","timestamp":"2026-10-15T13:01:00Z","cwd":"/p","gitBranch":"main","entrypoint":"cli","message":{"id":"msg_1","role":"assistant","content":[{"type":"thinking","thinking":"hmm","signature":"x"}]}}
+{"type":"assistant","sessionId":"s2","uuid":"a2","timestamp":"2026-10-15T13:01:01Z","cwd":"/p","gitBranch":"main","entrypoint":"cli","message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"I'll look first."}]}}
+{"type":"assistant","sessionId":"s2","uuid":"a3","timestamp":"2026-10-15T13:01:02Z","cwd":"/p","gitBranch":"main","entrypoint":"cli","message":{"id":"msg_1","role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]}}
+{"type":"user","sessionId":"s2","uuid":"u2","timestamp":"2026-10-15T13:01:03Z","cwd":"/p","gitBranch":"main","entrypoint":"cli","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}
+{"type":"assistant","sessionId":"s2","uuid":"a4","timestamp":"2026-10-15T13:02:00Z","cwd":"/p","gitBranch":"main","entrypoint":"cli","message":{"id":"msg_2","role":"assistant","content":[{"type":"thinking","thinking":"done","signature":"x"}]}}
+{"type":"assistant","sessionId":"s2","uuid":"a5","timestamp":"2026-10-15T13:02:01Z","cwd":"/p","gitBranch":"main","entrypoint":"cli","message":{"id":"msg_2","role":"assistant","content":[{"type":"text","text":"I tidied it."}]}}
+{"type":"assistant","sessionId":"s2","uuid":"a6","timestamp":"2026-10-15T13:02:02Z","cwd":"/p","gitBranch":"main","entrypoint":"cli","message":{"id":"msg_2","role":"assistant","content":[{"type":"text","text":"Want me to push?"}]}}
+{"type":"system","subtype":"stop_hook_summary","sessionId":"s2","uuid":"y1","timestamp":"2026-10-15T13:02:03Z","content":""}
+{"type":"system","subtype":"away_summary","sessionId":"s2","uuid":"y2","timestamp":"2026-10-15T13:12:00Z","content":"We tidied the README."}
+{"type":"last-prompt","sessionId":"s2"}

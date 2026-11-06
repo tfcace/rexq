@@ -1,0 +1,8 @@
+
+                                                            ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────
+❯ please go ahead and commit the change, then run the full test suite with the
+  race detector and tell me if anything fails
+────────────────────────────────────────────────────────────────────────────────
+  probe2.tHPA | Haiku 5.5 | Context ░░░░░░░░░░ 0% | Tokens: 0 | Limits: 5hr 2…
+  ⏵⏵ auto mode on (shift+tab to cycle)

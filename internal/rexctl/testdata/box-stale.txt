@@ -1,0 +1,20 @@
+
+────────────────────────────────────────────────────────────────────────────────
+❯ Try "edit <filepath> to..."
+────────────────────────────────────────────────────────────────────────────────
+  fixture.xI1k | Haiku 5.5 | Context ░░░░░░░░░░ 0% | Tokens: 0 | Limits: 5hr …
+  ⏵⏵ auto mode on (shift+tab to cycle)
+
+󰀵 me  ~/projects/demo   8s
+  11:44 
+ ls
+README.md  go.mod  main.go
+
+󰀵 me  ~/projects/demo
+  11:45 
+ git status --short
+ M main.go
+?? notes.txt
+
+󰀵 me  ~/projects/demo
+  11:45 

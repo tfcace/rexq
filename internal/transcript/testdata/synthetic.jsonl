@@ -1,0 +1,5 @@
+{"type":"user","sessionId":"s6","uuid":"u1","promptId":"p1","timestamp":"2026-10-15T13:00:00Z","cwd":"/p","entrypoint":"sdk-cli","message":{"role":"user","content":[{"type":"text","text":"[Image #1] is this aligned?"}]}}
+{"type":"assistant","sessionId":"s6","uuid":"a1","timestamp":"2026-10-15T13:01:00Z","cwd":"/p","entrypoint":"sdk-cli","message":{"id":"msg_1","model":"claude-opus","role":"assistant","content":[{"type":"text","text":"Not quite. Do you want me to fix it?"}]}}
+{"type":"user","sessionId":"s6","uuid":"m1","promptId":"p2","timestamp":"2026-10-15T13:05:00Z","cwd":"/p","entrypoint":"sdk-cli","message":{"role":"user","content":"<command-name>/cost</command-name>"}}
+{"type":"assistant","sessionId":"s6","uuid":"a2","timestamp":"2026-10-15T13:05:01Z","cwd":"/p","entrypoint":"sdk-cli","message":{"id":"msg_2","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"No response requested."}]}}
+this line is not JSON
