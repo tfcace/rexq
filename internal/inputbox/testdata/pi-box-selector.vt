@@ -1,0 +1,24 @@
+ [0m[38;2;210;142;54min /settings.[0m                                                                  
+[0m[38;2;142;151;171m────────────────────────────────────────────────────────────────────────────────[0m
+
+[0m[38;2;210;142;54mOnly showing models from configured providers. Use /login to add providers.[0m     
+
+> [0m[7m [0m                                                                             
+
+[0m[38;2;209;137;120m→ ✓ claude-haiku-4-5[0m[38;2;152;161;157m (Claude Haiku 4.5 (latest))[0m [0m[38;2;152;161;157m[anthropic][0m                    
+    claude-opus-5-5 [0m[38;2;152;161;157m[anthropic] · default[0m                                       
+    claude-fable-5 [0m[38;2;152;161;157m[anthropic][0m                                                  
+    claude-fable-5-1 [0m[38;2;152;161;157m[anthropic][0m                                                
+    claude-fable-5-2 [0m[38;2;152;161;157m[anthropic][0m                                                
+    claude-haiku-4-5-20251001 [0m[38;2;152;161;157m[anthropic][0m                                       
+    claude-haiku-5-5 [0m[38;2;152;161;157m[anthropic][0m                                                
+    claude-opus-4-5[0m[38;2;152;161;157m (Claude Opus 4.5 (latest))[0m [0m[38;2;152;161;157m[anthropic][0m                      
+    claude-opus-4-5-20251101 [0m[38;2;152;161;157m[anthropic][0m                                        
+    claude-opus-4-6 [0m[38;2;152;161;157m[anthropic][0m                                                 
+[0m[38;2;152;161;157m  (1/18)[0m                                                                        
+
+[0m[38;2;152;161;157m  Model Name: Claude Haiku 4.5 (latest)[0m                                         
+
+[0m[38;2;137;168;135m  Model catalogs refreshed.[0m                                                     
+
+[0m[38;2;122;131;127m/private/tmp/rexq-pi-fx (main)[0m

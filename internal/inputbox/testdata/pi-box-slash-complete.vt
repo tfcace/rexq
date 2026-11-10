@@ -1,0 +1,24 @@
+ [0m[38;2;122;131;127mPi can explain its own features and look up its docs. Ask it how to use or     [0m
+ [0m[38;2;122;131;127mextend Pi.[0m                                                                     
+
+[0m[38;2;210;142;54m[Skills][0m                                                                        
+[0m[38;2;122;131;127m  anatomy, find-skills, hairline-create, plannotator, plannotator-annotate,     [0m
+[0m[38;2;122;131;127mplannotator-compound, plannotator-last, plannotator-review,                     [0m
+[0m[38;2;122;131;127mplannotator-setup-goal, remotion-best-practices, rex[0m                            
+
+
+ [0m[38;2;210;142;54mWarning: Anthropic subscription auth is active. Third-party harness usage      [0m
+ [0m[38;2;210;142;54mdraws from extra usage and is billed per token, not your Claude plan limits.   [0m
+ [0m[38;2;210;142;54mManage extra usage at https://claude.ai/settings/usage. Disable this warning   [0m
+ [0m[38;2;210;142;54min /settings.[0m                                                                  
+
+[0m[38;2;117;132;136m────────────────────────────────────────────────────────────────────────────────[0m
+/mo[0m[7m [0m                                                                            
+[0m[38;2;117;132;136m────────────────────────────────────────────────────────────────────────────────[0m
+[0m[38;2;209;137;120m→ model                          <provider/model> — Select model (opens select[0m  
+  scoped-models[0m[38;2;152;161;157m                  Enable/disable models for Ctrl+P cycling[0m       
+  skill:remotion-best-practices[0m[38;2;152;161;157m  [u] Best practices for Remotion - Video creat[0m  
+  import[0m[38;2;152;161;157m                         Import a JSONL session, preserving its ID and[0m  
+  skill:plannotator-compound[0m[38;2;152;161;157m     [u] Analyze a user's Plannotator plan archive[0m  
+[0m[38;2;122;131;127m/private/tmp/rexq-pi-fx (main)[0m
+[0m[38;2;122;131;127m$0.000 (sub) 0.0%/200k (auto)                          claude-haiku-4-5 • medium[0m

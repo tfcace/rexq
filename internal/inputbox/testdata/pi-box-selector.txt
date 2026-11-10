@@ -1,0 +1,24 @@
+ in /settings.
+────────────────────────────────────────────────────────────────────────────────
+
+Only showing models from configured providers. Use /login to add providers.
+
+>
+
+→ ✓ claude-haiku-4-5 (Claude Haiku 4.5 (latest)) [anthropic]
+    claude-opus-5-5 [anthropic] · default
+    claude-fable-5 [anthropic]
+    claude-fable-5-1 [anthropic]
+    claude-fable-5-2 [anthropic]
+    claude-haiku-4-5-20251001 [anthropic]
+    claude-haiku-5-5 [anthropic]
+    claude-opus-4-5 (Claude Opus 4.5 (latest)) [anthropic]
+    claude-opus-4-5-20251101 [anthropic]
+    claude-opus-4-6 [anthropic]
+  (1/18)
+
+  Model Name: Claude Haiku 4.5 (latest)
+
+  Model catalogs refreshed.
+
+/private/tmp/rexq-pi-fx (main)

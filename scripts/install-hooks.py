@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Add rexq's SessionStart, UserPromptSubmit and Stop hooks to Claude Code's settings,
-or take them out again.
+or take them out again. With --pi, install or remove rexq's Pi extension instead.
 
 usage: install-hooks.py [settings.json [rexq binary]]
        install-hooks.py --uninstall [settings.json]
+       install-hooks.py --pi [--model provider/model] [extension file [rexq binary]]
+       install-hooks.py --pi --uninstall [extension file]
 
 The settings file defaults to $CLAUDE_CONFIG_DIR/settings.json, or
 ~/.claude/settings.json without CLAUDE_CONFIG_DIR. The binary defaults to the
@@ -16,6 +18,14 @@ drops the groups and events that held nothing else. Nothing is written when
 nothing changes. The file is backed up first and written atomically, through
 a symlink if it is one, keeping its mode. A missing file is created, with its
 directory, readable only by you.
+
+--pi writes pi/rexq.ts from this repository to $PI_CODING_AGENT_DIR/extensions/
+rexq.ts (~/.pi/agent/extensions/rexq.ts without PI_CODING_AGENT_DIR), with the
+rexq binary's path written into it. It won't overwrite a rexq.ts that isn't
+rexq's. --model provider/model (or auto) also sets the model Pi extractions run
+with, as `rexq config set pi-model` and /rexq-model in Pi do; without it the
+setting stays as it is. --pi --uninstall deletes the file, only if it is rexq's.
+Running Pi sessions load the change on /reload.
 """
 import json, os, re, shlex, shutil, stat, subprocess, sys, tempfile, time
 
@@ -216,7 +226,152 @@ def main_uninstall(args):
     print(f"removed rexq's hooks from {path}{saved(backup)}")
 
 
+PI_MARKER = "// rexq Pi extension: installed by scripts/install-hooks.py --pi."
+
+# provider/model: a provider id, a slash, and a model id that may hold more
+# slashes (openrouter/anthropic/claude-haiku-5.5), without spaces or quotes.
+PI_MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._:@+~-][A-Za-z0-9._:@+~/-]*")
+
+
+def default_pi_extension():
+    """$PI_CODING_AGENT_DIR/extensions/rexq.ts, where Pi finds global
+    extensions, or ~/.pi/agent/extensions/rexq.ts."""
+    base = os.environ.get("PI_CODING_AGENT_DIR") or os.path.expanduser("~/.pi/agent")
+    return os.path.join(os.path.expanduser(base), "extensions", "rexq.ts")
+
+
+def is_ours(path):
+    """Whether the file at path is an installed rexq extension."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.readline().rstrip("\n") == PI_MARKER
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
+def pi_source(binary):
+    """pi/rexq.ts with the binary written in."""
+    here = os.path.dirname(os.path.realpath(__file__))
+    template = os.path.join(here, "..", "pi", "rexq.ts")
+    try:
+        with open(template, encoding="utf-8") as f:
+            src = f.read()
+    except OSError as e:
+        fail(f"can't read the extension {template}: {e}")
+    if not src.startswith(PI_MARKER + "\n"):
+        fail(f"{template} doesn't look like rexq's Pi extension")
+    for name, value in (("REXQ_BIN", binary),):
+        line = re.compile(r"^const " + name + r" = .*;$", re.M)
+        if len(line.findall(src)) != 1:
+            fail(f"{template} has no single `const {name} = ...;` line")
+        # json.dumps writes a valid TypeScript string literal.
+        src = line.sub(lambda m: f"const {name} = {json.dumps(value)};", src)
+    return src
+
+
+def main_pi(args):
+    uninstall = False
+    model = ""
+    rest = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--uninstall":
+            uninstall = True
+        elif a == "--model":
+            if i + 1 >= len(args):
+                fail("--model needs a value: provider/model, as in anthropic/claude-haiku-5-5, or auto")
+            model = args[i + 1]
+            i += 1
+        elif a.startswith("--model="):
+            model = a[len("--model="):]
+        elif a.startswith("-"):
+            fail(f"unknown option {a}")
+        else:
+            rest.append(a)
+        i += 1
+    if uninstall:
+        if model:
+            fail("--model has nothing to do with --uninstall")
+        if len(rest) > 1:
+            fail("usage: install-hooks.py --pi --uninstall [extension file]")
+        path = rest[0] if rest else default_pi_extension()
+        if not os.path.lexists(path):
+            print(f"{path} doesn't exist; rexq's Pi extension isn't installed there")
+            return
+        if not is_ours(path):
+            fail(f"{path} isn't rexq's Pi extension; leaving it alone")
+        try:
+            os.unlink(path)
+        except OSError as e:
+            fail(f"can't remove {path}: {e}")
+        print(f"removed rexq's Pi extension {path}; /reload running Pi sessions")
+        return
+    if len(rest) > 2:
+        fail("usage: install-hooks.py --pi [--model provider/model] [extension file [rexq binary]]")
+    if model and model != "auto" and not PI_MODEL.fullmatch(model):
+        fail(f"--model {model!r} is not provider/model, as in anthropic/claude-haiku-5-5 or openai/gpt-5-mini, or auto")
+    path = rest[0] if rest else default_pi_extension()
+    if not path or os.path.isdir(path):
+        fail(f"{path!r} is not a file path for the extension")
+    binary = rest[1] if len(rest) > 1 else default_binary()
+    binary = os.path.abspath(binary)
+    check_binary(binary)
+    if os.path.lexists(path) and not is_ours(path):
+        fail(f"{path} exists and isn't rexq's Pi extension; move it away first")
+    src = pi_source(binary)
+    try:
+        with open(path, encoding="utf-8") as f:
+            current = f.read() == src
+    except (OSError, UnicodeDecodeError):
+        current = False
+    if current:
+        print(f"{path} already has rexq's Pi extension")
+    else:
+        write_extension(path, src)
+        print(f"installed rexq's Pi extension in {path}; /reload running Pi sessions")
+    if model:
+        set_pi_model(binary, model)
+    print("Every Pi extraction is a pi -p call, billed to the provider of the model it uses (with Anthropic"
+          " subscription auth, as extra usage). Choose the model with /rexq-model in Pi.")
+
+
+def set_pi_model(binary, model):
+    """Set the pi-model setting through rexq, which keeps it in its store."""
+    try:
+        r = subprocess.run([binary, "config", "set", "pi-model", model], stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        fail(f"`{binary} config set pi-model` didn't run: {e}")
+    if r.returncode != 0:
+        fail(f"`{binary} config set pi-model {model}` failed: {(r.stderr or r.stdout).strip()}")
+    if model == "auto":
+        print("Pi extractions use a cheap model of each session's provider (automatic)")
+    else:
+        print(f"Pi extractions use {model}")
+
+
+def write_extension(path, src):
+    """Write src to path atomically."""
+    real = os.path.realpath(path)
+    tmp = real + ".tmp"
+    try:
+        os.makedirs(os.path.dirname(real), exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(src)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, real)
+    except OSError as e:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        fail(f"can't write {path}: {e}")
+
+
 def main():
+    if "--pi" in sys.argv[1:]:
+        main_pi([a for a in sys.argv[1:] if a != "--pi"])
+        return
     if len(sys.argv) > 1 and sys.argv[1] == "--uninstall":
         main_uninstall(sys.argv[2:])
         return

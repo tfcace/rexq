@@ -10,11 +10,11 @@ import (
 	"io"
 	"time"
 
+	"github.com/tfcace/rexq/internal/agent"
 	"github.com/tfcace/rexq/internal/extract"
 	"github.com/tfcace/rexq/internal/filter"
 	"github.com/tfcace/rexq/internal/images"
 	"github.com/tfcace/rexq/internal/store"
-	"github.com/tfcace/rexq/internal/transcript"
 )
 
 type stopInput struct {
@@ -24,6 +24,17 @@ type stopInput struct {
 	TranscriptPath       string `json:"transcript_path"`
 	AgentID              string `json:"agent_id"`
 	LastAssistantMessage string `json:"last_assistant_message"`
+	// Agent is the agent's id (see package agent); Claude Code sends none.
+	// The rest of this block only comes from agents other than Claude:
+	// the turn's prompt as the agent saw it, and the session's provider
+	// and model.
+	Agent      string `json:"agent,omitempty"`
+	TurnPrompt string `json:"prompt,omitempty"`
+	Provider   string `json:"provider,omitempty"`
+	Model      string `json:"model,omitempty"`
+	// Env holds the agent's TurnEnv as they were when the turn ended, so
+	// a retry from another hook's environment runs as the turn would have.
+	Env map[string]string `json:"rex_env,omitempty"`
 	// Captured when the hook fires, so a queued retry still knows where the
 	// agent was and what the user had asked in that turn.
 	RexSession string `json:"rex_session"`
@@ -69,9 +80,29 @@ func Stop(ctx context.Context, d Deps, r io.Reader) error {
 	if in.AgentID != "" || in.SessionID == "" {
 		return nil
 	}
+	a, ok := agent.ByID(in.Agent)
+	if !ok {
+		return fmt.Errorf("stop: unknown agent %q", in.Agent)
+	}
 	in.EndedAt = d.Now().Unix()
 	in.RexSession, in.RexBlock = d.Env("REX_SESSION"), d.Env("REX_BLOCK")
+	for _, k := range a.TurnEnv {
+		if v := d.Env(k); v != "" {
+			if in.Env == nil {
+				in.Env = map[string]string{}
+			}
+			in.Env[k] = v
+		}
+	}
 	run := &stopRun{d: d}
+	if a.ModelSetting != "" {
+		// Pi's first-run picker may be open: the user hasn't seen the
+		// model yet, so nothing of this agent is extracted until they
+		// answer it (or it is abandoned; see store.AskWait).
+		st, err := d.Store.AskState(a.ModelSetting, d.Now())
+		run.note(err)
+		run.waiting = st == store.AskOpen
+	}
 	// A session started before the hooks were installed never claimed its
 	// pane at SessionStart. It may take the pane now if nobody owns it, so
 	// its items can be answered in place. Only the live turn: a retry's pane
@@ -80,11 +111,15 @@ func Stop(ctx context.Context, d Deps, r io.Reader) error {
 		_, err := d.Store.ClaimUnownedPane(in.RexBlock, in.RexSession, in.SessionID, d.Now())
 		run.note(err)
 	}
-	prompt, err := d.Store.LastPrompt(in.SessionID)
-	in.Prompt = prompt
-	run.note(err)
+	if a.StopSendsPrompt {
+		in.Prompt = in.TurnPrompt
+	} else {
+		prompt, err := d.Store.LastPrompt(in.SessionID)
+		in.Prompt = prompt
+		run.note(err)
+	}
 	run.session(ctx, &in)
-	run.others(ctx, in.SessionID)
+	run.others(ctx, in.SessionID, a)
 	return errors.Join(run.errs...)
 }
 
@@ -95,7 +130,13 @@ type stopRun struct {
 	d      Deps
 	failed bool
 	errs   []error
+	// waiting is set while the user is being asked for the agent's
+	// extraction model: the live turn is queued, nothing is extracted.
+	waiting bool
 }
+
+// errWaitingForModel queues a turn while the model picker is open.
+var errWaitingForModel = errors.New("waiting for the extraction model to be chosen in Pi (/rexq-model); the turn is queued")
 
 // note keeps err, if any, for the log.
 func (r *stopRun) note(err error) {
@@ -114,6 +155,11 @@ func (r *stopRun) session(ctx context.Context, in *stopInput) {
 		return
 	}
 	defer unlock()
+	if r.waiting {
+		r.failed = true // retry nothing else either
+		r.note(r.queue(in, errWaitingForModel))
+		return
+	}
 	// Due or not: holding the lock, this hook is the one to run them, and
 	// in order. After a failure it leaves the rest queued but still runs
 	// the live turn, so a turn that always fails can't hold up the session.
@@ -122,6 +168,9 @@ func (r *stopRun) session(ctx context.Context, in *stopInput) {
 	for _, row := range rows {
 		if r.failed {
 			break
+		}
+		if !r.mayRetry(row, in.agent()) {
+			continue
 		}
 		r.retry(ctx, row, r.d.Store.ClaimPendingEarly)
 	}
@@ -133,10 +182,29 @@ func (r *stopRun) session(ctx context.Context, in *stopInput) {
 	}
 }
 
-// others retries a few queued turns of other sessions, each session's oldest
-// due one. It skips a session whose lock is taken: that session's own hook
-// will get to them.
-func (r *stopRun) others(ctx context.Context, self string) {
+// mayRetry reports whether this hook, which runs for agent a, may retry the
+// queued turn row: only turns of a, whose runner needs a's environment. A
+// turn of an agent this rexq doesn't know is left queued, with a note. An
+// unreadable turn counts as Claude's, as before there were agents; retry
+// drops it.
+func (r *stopRun) mayRetry(row store.PendingRow, a agent.Agent) bool {
+	var p struct {
+		Agent string `json:"agent"`
+	}
+	if json.Unmarshal(row.Payload, &p) != nil {
+		return a.ID == agent.Claude.ID
+	}
+	if _, ok := agent.ByID(p.Agent); !ok {
+		r.note(fmt.Errorf("leaving queued turn %d alone: unknown agent %q (written by a newer rexq?)", row.ID, p.Agent))
+		return false
+	}
+	return p.Agent == a.ID
+}
+
+// others retries a few queued turns of other sessions of agent a, each
+// session's oldest due one. It skips a session whose lock is taken: that
+// session's own hook will get to them.
+func (r *stopRun) others(ctx context.Context, self string, a agent.Agent) {
 	if r.failed {
 		return
 	}
@@ -147,7 +215,7 @@ func (r *stopRun) others(ctx context.Context, self string) {
 		if r.failed || tried == otherRetries {
 			return
 		}
-		if row.ClaudeSession == self {
+		if row.ClaudeSession == self || !r.mayRetry(row, a) {
 			continue
 		}
 		unlock, ok, err := r.d.Locks.TryLock(row.ClaudeSession)
@@ -210,7 +278,9 @@ func (r *stopRun) queue(in *stopInput, cause error) error {
 // branch from there.
 func (d Deps) lookUpRepo(in *stopInput) {
 	if in.LaunchDir == "" {
-		in.LaunchDir = transcript.LaunchDir(in.TranscriptPath, in.Cwd)
+		if a, ok := agent.ByID(in.Agent); ok {
+			in.LaunchDir = a.LaunchDir(in.TranscriptPath, in.Cwd)
+		}
 	}
 	if !in.HaveRepo {
 		in.Project, in.Branch = d.Repo(in.LaunchDir)
@@ -245,7 +315,20 @@ func (d Deps) process(ctx context.Context, in *stopInput, live bool) (note, err 
 	for _, it := range open {
 		earlier = append(earlier, extract.OpenItem{ID: it.ID, Title: it.Title})
 	}
-	res, err := extract.Extract(ctx, d.Runner, extract.Input{Message: msg, Prompt: in.Prompt, Open: earlier})
+	a, ok := agent.ByID(in.Agent)
+	if !ok { // mayRetry and Stop keep these out
+		return errors.Join(notes...), fmt.Errorf("unknown agent %q", in.Agent)
+	}
+	getenv := in.getenv(a, d.Env)
+	choice := in.modelChoice(a, getenv)
+	if a.ModelSetting != "" {
+		// Read now, not when the turn ended: a retry uses the model
+		// chosen since, as every hook and backfill do.
+		v, err := s.Setting(a.ModelSetting)
+		notes = append(notes, err)
+		choice.Configured = v
+	}
+	res, err := extract.Extract(ctx, d.runner(a, choice, getenv), extract.Input{Message: msg, Prompt: in.Prompt, Open: earlier})
 	// Recorded for the panel, which warns while extraction fails. A hook
 	// stopped by its pane closing says nothing about extraction.
 	switch {
@@ -287,7 +370,7 @@ func (d Deps) process(ctx context.Context, in *stopInput, live bool) (note, err 
 			Cwd: in.LaunchDir, Branch: in.Branch, Project: in.Project,
 			Kind: f.Kind, Title: f.Title, Body: f.Quote, Context: f.Context, Prompt: in.Prompt,
 			Replies: f.Replies, Suggested: f.Suggested, Images: shots,
-			CreatedAt: asked,
+			CreatedAt: asked, Agent: a.ID,
 		})
 		if err == nil && !added {
 			skipped++
@@ -300,6 +383,41 @@ func (d Deps) process(ctx context.Context, in *stopInput, live bool) (note, err 
 		notes = append(notes, fmt.Errorf("skipped %d duplicate items of session %s", skipped, in.SessionID))
 	}
 	return errors.Join(notes...), errors.Join(errs...)
+}
+
+// agent is the live turn's agent, which Stop checked is known.
+func (in *stopInput) agent() agent.Agent {
+	a, _ := agent.ByID(in.Agent)
+	return a
+}
+
+// getenv is the environment the turn's runner reads: the agent's TurnEnv
+// as kept when the turn ended, or for Claude, which keeps none, the hook's.
+func (in *stopInput) getenv(a agent.Agent, env func(string) string) func(string) string {
+	if len(a.TurnEnv) == 0 {
+		return env
+	}
+	return func(k string) string { return in.Env[k] }
+}
+
+// modelChoice is what the turn says about extraction models.
+func (in *stopInput) modelChoice(a agent.Agent, getenv func(string) string) extract.ModelChoice {
+	c := extract.ModelChoice{Provider: in.Provider, Session: in.Model}
+	if a.ModelEnv != "" {
+		c.Env = getenv(a.ModelEnv)
+	}
+	return c
+}
+
+// runner returns the extraction runner for agent a's turns.
+func (d Deps) runner(a agent.Agent, c extract.ModelChoice, getenv func(string) string) extract.Runner {
+	switch {
+	case d.RunnerFor != nil:
+		return d.RunnerFor(a, c)
+	case a.ID == agent.Claude.ID && d.Runner != nil:
+		return d.Runner // set before there were agents: Claude's
+	}
+	return a.Runner(c, getenv)
 }
 
 // SourceMsg keys a turn's items: the prompt id and the start of the final

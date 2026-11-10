@@ -56,9 +56,12 @@ type Item struct {
 	SnoozeTrigger string
 	AnsweredWith  string
 	CreatedAt     time.Time
+	// Agent is the agent that asked: "" for Claude Code, "pi" for Pi (see
+	// package agent).
+	Agent string
 	// PromptedAt is when the user last wrote to the item's Claude session,
 	// as the prompt hook saw it; zero if never. Read only: it comes from
-	// the prompts table.
+	// the last_prompts table.
 	PromptedAt time.Time
 }
 
@@ -76,8 +79,8 @@ func (it Item) Snoozed(now time.Time) bool {
 
 const columns = `id, rex_session, rex_block, claude_session, source_msg, seq, cwd, branch, project,
   kind, title, body, context, prompt, replies, suggested, images, state, snooze_until,
-  snooze_trigger, answered_with, created_at,
-  COALESCE((SELECT updated_at FROM prompts WHERE prompts.claude_session = items.claude_session), 0)`
+  snooze_trigger, answered_with, created_at, agent,
+  COALESCE((SELECT updated_at FROM last_prompts WHERE last_prompts.claude_session = items.claude_session), 0)`
 
 // Insert adds an item. It reports false, without error, when an item with
 // the same session, message and position is already stored.
@@ -111,11 +114,11 @@ func insert(e execer, it Item, where string, whereArgs ...any) (int64, bool, err
 	images, _ := json.Marshal(nonNil(it.Images))
 	args := append(whereArgs, it.ClaudeSession, it.SourceMsg, it.Seq,
 		it.Cwd, it.Branch, it.Project, it.Kind, it.Title, it.Body, it.Context, it.Prompt,
-		string(replies), it.Suggested, string(images), it.State, it.CreatedAt.Unix())
+		string(replies), it.Suggested, string(images), it.State, it.CreatedAt.Unix(), it.Agent)
 	res, err := e.Exec(`INSERT INTO items (rex_session, rex_block, claude_session, source_msg, seq,
 		cwd, branch, project, kind, title, body, context, prompt, replies, suggested, images,
-		state, created_at)
-		VALUES (`+where+`, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		state, created_at, agent)
+		VALUES (`+where+`, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (claude_session, source_msg, seq) DO NOTHING`, args...)
 	if err != nil {
 		return 0, false, err
@@ -179,7 +182,7 @@ func scan(rows *sql.Rows) (Item, error) {
 	var until, created, prompted int64
 	err := rows.Scan(&it.ID, &it.RexSession, &it.RexBlock, &it.ClaudeSession, &it.SourceMsg, &it.Seq,
 		&it.Cwd, &it.Branch, &it.Project, &it.Kind, &it.Title, &it.Body, &it.Context, &it.Prompt,
-		&replies, &it.Suggested, &images, &it.State, &until, &it.SnoozeTrigger, &it.AnsweredWith, &created, &prompted)
+		&replies, &it.Suggested, &images, &it.State, &until, &it.SnoozeTrigger, &it.AnsweredWith, &created, &it.Agent, &prompted)
 	if err != nil {
 		return it, err
 	}

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tfcace/rexq/internal/agent"
 	"github.com/tfcace/rexq/internal/rexenv"
 )
 
@@ -205,20 +206,34 @@ type Status struct {
 	Kind  string `json:"kind"`
 
 	// Hold, when set, is why the pane's process tree rules out typing,
-	// whatever the records say: Claude is suspended, hasn't reported a
+	// whatever the records say: the agent is suspended, hasn't reported a
 	// status yet, or something else runs there.
 	Hold string `json:"-"`
+
+	// Ready is set when the agent reports a state, besides idle and done,
+	// in which it takes a typed reply (Pi's "error").
+	Ready bool `json:"-"`
 }
 
 const (
-	holdSuspended = "Claude is suspended there"
-	holdStarting  = "the agent may still be starting; try again in a moment"
-	holdUnknown   = "can't tell what's running there"
-	holdRemote    = "that pane is on another machine"
+	holdStarting = "the agent may still be starting; try again in a moment"
+	holdUnknown  = "can't tell what's running there"
+	holdRemote   = "that pane is on another machine"
 )
 
-// ClaudeStatus returns Claude Code's status in block. ok is false only when
-// Claude is confirmed absent, so resuming the conversation elsewhere can't
+// holdSuspended is the hold for a's suspended process.
+func holdSuspended(a agent.Agent) string { return a.Name + " is suspended there" }
+
+// claudeLike reports whether comm is Claude Code.
+func claudeLike(comm string) bool { return agent.Claude.IsProcess(comm) }
+
+// ClaudeStatus returns Claude Code's status in block. See AgentStatus.
+func (r Rex) ClaudeStatus(ctx context.Context, block string) (Status, bool, error) {
+	return r.AgentStatus(ctx, agent.Claude, block)
+}
+
+// AgentStatus returns agent a's status in block. ok is false only when
+// it is confirmed absent, so resuming the conversation elsewhere can't
 // run it twice: the block doesn't exist (rex exits 3), or no Claude process
 // runs under the block and nothing but a shell does (the block's root
 // process alone, or login with the user's shell as its only descendant).
@@ -228,10 +243,11 @@ const (
 // Claude's presence comes from the local process tree under the block's
 // root process: Rex's records outlive a killed or suspended Claude, and in
 // an ordinary tab Rex reports login as the foreground whatever runs under
-// it. The state comes from Claude's own record (the one without an id). If
-// any claude-code record, a subagent's included, is blocked, so is the
-// pane, and the result carries that record's id and kind.
-func (r Rex) ClaudeStatus(ctx context.Context, block string) (Status, bool, error) {
+// it. The state comes from the agent's own record (the one without an id).
+// If any of its records, a subagent's included, is blocked, so is the pane,
+// and the result carries that record's id and kind. (Claude was the first
+// agent, so the comments below say Claude for any.)
+func (r Rex) AgentStatus(ctx context.Context, a agent.Agent, block string) (Status, bool, error) {
 	local, err := r.onThisMachine(ctx, block)
 	if err != nil {
 		if notFound(err) {
@@ -291,7 +307,7 @@ func (r Rex) ClaudeStatus(ctx context.Context, block string) (Status, bool, erro
 	tree := all.tree(proc.Child.PID)
 	var claudeProc *process
 	for i := range tree {
-		if claudeLike(tree[i].comm) {
+		if a.IsProcess(tree[i].comm) {
 			claudeProc = &tree[i] // the one nearest the root
 			break
 		}
@@ -304,19 +320,19 @@ func (r Rex) ClaudeStatus(ctx context.Context, block string) (Status, bool, erro
 	case claudeProc == nil:
 		return Status{Hold: holdUnknown}, true, nil
 	case strings.Contains(claudeProc.stat, "T"):
-		return Status{App: "claude-code", Hold: holdSuspended}, true, nil
+		return Status{App: a.StatusApp, Hold: holdSuspended(a)}, true, nil
 	}
 
 	var claude []Status
 	for _, s := range res.Records {
-		if s.App == "claude-code" {
+		if s.App == a.StatusApp {
 			claude = append(claude, s)
 		}
 	}
 	if len(claude) == 0 {
 		return Status{Hold: holdStarting}, true, nil
 	}
-	st := Status{App: "claude-code"} // no root record: state "" refuses
+	st := Status{App: a.StatusApp} // no root record: state "" refuses
 	for _, s := range claude {
 		if s.ID == "" {
 			st = s
@@ -329,6 +345,7 @@ func (r Rex) ClaudeStatus(ctx context.Context, block string) (Status, bool, erro
 			break
 		}
 	}
+	st.Ready = st.State != "idle" && st.State != "done" && a.Ready(st.State)
 	return st, true, nil
 }
 
@@ -370,26 +387,33 @@ func statusRefusal(st Status) string {
 		return "the agent is waiting on a dialog"
 	case st.State == "blocked":
 		return "the agent is waiting on a " + st.Kind + " dialog"
-	case st.State != "idle" && st.State != "done":
+	case st.State != "idle" && st.State != "done" && !st.Ready:
 		return "the agent is busy"
 	}
 	return ""
 }
 
-// Choose reads block's status and input box and decides how to deliver
-// reply. When Rex can't be reached it refuses with the reason. A reply that
-// would switch Claude's input mode is refused before asking Rex anything.
+// Choose decides how to deliver reply to the Claude in block. See
+// ChooseFor.
 func (r Rex) Choose(ctx context.Context, block, reply string) (Delivery, string) {
+	return r.ChooseFor(ctx, agent.Claude, block, reply)
+}
+
+// ChooseFor reads block's status and input box and decides how to deliver
+// reply to agent a. When Rex can't be reached it refuses with the reason. A
+// reply that would switch the agent's input mode is refused before asking
+// Rex anything.
+func (r Rex) ChooseFor(ctx context.Context, a agent.Agent, block, reply string) (Delivery, string) {
 	if switchesMode(reply) {
 		return Refuse, errModeSwitch.Error()
 	}
-	st, ok, err := r.ClaudeStatus(ctx, block)
+	st, ok, err := r.AgentStatus(ctx, a, block)
 	if err != nil {
 		return Refuse, "couldn't reach Rex: " + err.Error()
 	}
 	var box Box
 	if ok {
-		if box, err = r.InputBox(ctx, block); err != nil {
+		if box, err = r.InputBoxOf(ctx, a, block); err != nil {
 			return Refuse, "couldn't reach Rex: " + err.Error()
 		}
 	}
@@ -402,16 +426,21 @@ type NotSentError struct{ Why string }
 
 func (e *NotSentError) Error() string { return "typed but not sent: " + e.Why }
 
-// Send types text into block and presses Enter, but only after it has seen
-// the text land: Claude still idle or done and blocked on nothing, and the
-// input box holding exactly the text. Otherwise the text stays typed but
+// Send types text into the Claude in block. See SendTo.
+func (r Rex) Send(ctx context.Context, block, text string) error {
+	return r.SendTo(ctx, agent.Claude, block, text)
+}
+
+// SendTo types text into agent a in block and presses Enter, but only after
+// it has seen the text land: the agent still ready and blocked on nothing,
+// and the input box holding exactly the text. Otherwise the text stays typed but
 // unsent, and the error is a *NotSentError.
 //
 // Replies are one line: \r\n, \r, \n and tabs become spaces, and other
 // control characters (C0, DEL, C1, so ESC too) are dropped. A newline would
 // submit early, and escapes could drive the terminal. A reply starting
 // with "/" or "!" is refused before anything is typed (see switchesMode).
-func (r Rex) Send(ctx context.Context, block, text string) error {
+func (r Rex) SendTo(ctx context.Context, a agent.Agent, block, text string) error {
 	text = typedLine(text)
 	if switchesMode(text) {
 		return errModeSwitch
@@ -422,7 +451,7 @@ func (r Rex) Send(ctx context.Context, block, text string) error {
 	if _, err := r.Run(ctx, "send", "-b", block, "--", text); err != nil {
 		return err
 	}
-	if why := r.waitTyped(ctx, block, text); why != "" {
+	if why := r.waitTyped(ctx, a, block, text); why != "" {
 		return &NotSentError{why}
 	}
 	_, err := r.Run(ctx, "send-key", "-b", block, "enter")
@@ -431,7 +460,7 @@ func (r Rex) Send(ctx context.Context, block, text string) error {
 
 // waitTyped polls until block's input box holds text with nothing in the
 // way, and returns "" then, or why it gave up.
-func (r Rex) waitTyped(ctx context.Context, block, text string) string {
+func (r Rex) waitTyped(ctx context.Context, a agent.Agent, block, text string) string {
 	wait := r.wait
 	if wait == 0 {
 		wait = 500 * time.Millisecond
@@ -439,18 +468,18 @@ func (r Rex) waitTyped(ctx context.Context, block, text string) string {
 	deadline := time.Now().Add(wait)
 	want := strings.Join(strings.Fields(text), " ")
 	for {
-		st, ok, err := r.ClaudeStatus(ctx, block)
+		st, ok, err := r.AgentStatus(ctx, a, block)
 		switch {
 		case err != nil:
 			return "couldn't reach Rex: " + err.Error()
 		case !ok:
-			return "Claude is no longer running there"
+			return a.Name + " is no longer running there"
 		}
 		if why := statusRefusal(st); why != "" {
 			return why
 		}
 		var why string
-		box, err := r.InputBox(ctx, block)
+		box, err := r.InputBoxOf(ctx, a, block)
 		switch {
 		case err != nil:
 			return "couldn't reach Rex: " + err.Error()
@@ -502,18 +531,23 @@ func typedLine(text string) string {
 	return strings.TrimSpace(text)
 }
 
-// Resume opens a tab that resumes a Claude conversation, sending reply as
-// its first message when reply isn't empty. It refuses while any Claude
-// runs in cwd, since that may be this conversation. It must run in the
-// conversation's own directory, or claude can't find it. The tab stays open
-// if claude exits, so a failed resume stays visible. An empty session means
-// Rex's default session.
+// Resume opens a tab that resumes a Claude conversation. See ResumeAgent.
 func (r Rex) Resume(ctx context.Context, session, cwd, claudeSession, reply string) error {
+	return r.ResumeAgent(ctx, agent.Claude, session, cwd, claudeSession, reply)
+}
+
+// ResumeAgent opens a tab that resumes a conversation of agent a, sending
+// reply as its first message when reply isn't empty. It refuses while any
+// process of a runs in cwd, since that may be this conversation. It must
+// run in the conversation's own directory, or claude can't find it. The
+// tab stays open if the agent exits, so a failed resume stays visible. An
+// empty session means Rex's default session.
+func (r Rex) ResumeAgent(ctx context.Context, a agent.Agent, session, cwd, claudeSession, reply string) error {
 	if switchesMode(reply) {
 		return errModeSwitch // as a first message, "/x" runs a slash command
 	}
 	if claudeSession == "" {
-		return errors.New("no Claude session to resume")
+		return fmt.Errorf("no %s session to resume", a.Name)
 	}
 	if cwd == "" {
 		return errors.New("no project directory for that conversation")
@@ -524,22 +558,19 @@ func (r Rex) Resume(ctx context.Context, session, cwd, claudeSession, reply stri
 	// A Claude the hooks never saw (started before they were installed, or
 	// outside Rex) has no pane on record, so the caller may think the
 	// conversation isn't running. Never start a second Claude next to one.
-	running, err := r.ClaudeRunningIn(ctx, cwd)
+	running, err := r.RunningIn(ctx, a, cwd)
 	if err != nil {
-		return fmt.Errorf("couldn't check for a running Claude: %v", err)
+		return fmt.Errorf("couldn't check for a running %s: %v", a.Name, err)
 	}
 	if running {
-		return errors.New("a Claude is already running in that project; jump there or answer in it")
+		return fmt.Errorf("a %s is already running in that project; jump there or answer in it", a.Name)
 	}
 	args := []string{"run"}
 	if session != "" {
 		args = append(args, "-s", session)
 	}
-	args = append(args, "-c", cwd, "--keep-open", "--label", "claude "+Short(claudeSession),
-		"--", "claude", "--resume", claudeSession)
-	if reply != "" {
-		args = append(args, "--", reply) // a reply starting with "-" isn't a flag
-	}
+	args = append(args, "-c", cwd, "--keep-open", "--label", a.Command+" "+a.ShortID(claudeSession), "--")
+	args = append(args, a.ResumeArgv(claudeSession, reply)...)
 	_, err = r.Run(ctx, args...)
 	return err
 }

@@ -20,10 +20,11 @@ import (
 )
 
 const usage = `usage:
-  rexq hook prompt|start|stop   run as a Claude Code hook (reads hook JSON on stdin)
+  rexq hook prompt|start|stop   run as a Claude Code hook, or for the Pi extension (reads hook JSON on stdin)
   rexq panel [--layer]          open the questions panel (--layer: as the Rex floating layer)
   rexq list [-all]              print open questions
-  rexq backfill [flags]         extract questions from past transcripts`
+  rexq backfill [flags]         extract questions from past transcripts (--pi: Pi's)
+  rexq config get|set pi-model  the model Pi extractions run with (see rexq config)`
 
 func main() {
 	if len(os.Args) < 2 {
@@ -39,6 +40,8 @@ func main() {
 		err = listMain(os.Args[2:])
 	case "backfill":
 		err = backfillMain(os.Args[2:])
+	case "config":
+		err = configMain(os.Args[2:])
 	case "panel":
 		var layer bool
 		if layer, err = panelLayer(os.Args[2:], os.Getenv); err != nil {

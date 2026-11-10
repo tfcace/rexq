@@ -1,0 +1,22 @@
+== run 1: exit 0
+-- stdout
+removed rexq's hooks from $DIR/settings.json (backup at $DIR/settings.json.bak-N)
+-- stderr
+-- settings.json
+mode -rw-r--r--
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "say done"
+          }
+        ]
+      }
+    ]
+  }
+}
+-- 1 backups
+backup equals the input: true

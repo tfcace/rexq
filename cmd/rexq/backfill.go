@@ -10,20 +10,39 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tfcace/rexq/internal/agent"
 	"github.com/tfcace/rexq/internal/extract"
 	"github.com/tfcace/rexq/internal/filter"
 	"github.com/tfcace/rexq/internal/hook"
 	"github.com/tfcace/rexq/internal/images"
-	"github.com/tfcace/rexq/internal/rexctl"
 	"github.com/tfcace/rexq/internal/store"
-	"github.com/tfcace/rexq/internal/transcript"
 )
 
 func backfillMain(args []string) error {
 	fs := flag.NewFlagSet("backfill", flag.ExitOnError)
 	since := fs.Duration("since", 7*24*time.Hour, "only sessions whose last turn is newer than this")
 	dry := fs.Bool("dry-run", false, "list what would be extracted, call nothing")
+	pi := fs.Bool("pi", false, "Pi's sessions instead of Claude Code's. Pi's session files don't say whether a\n"+
+		"session was interactive or a scripted pi -p run, so scripted runs are extracted too")
 	fs.Parse(args)
+
+	if *pi {
+		root, err := piSessionsDir(os.Getenv)
+		if err != nil {
+			return err
+		}
+		s := openStore()
+		defer s.Close()
+		fmt.Fprintln(os.Stdout, "Pi sessions don't say whether they were interactive: scripted pi -p runs are included.")
+		return backfill(backfillDeps{
+			Root: root, Store: s, Agent: agent.Pi,
+			RunnerFor: func(c extract.ModelChoice) extract.Runner {
+				c.Env = os.Getenv(extract.PiModelEnv)
+				return agent.Pi.Runner(c, os.Getenv)
+			},
+			Repo: hook.Repo, Now: time.Now, Out: os.Stdout,
+		}, *since, *dry)
+	}
 
 	root, err := projectsDir(os.Getenv)
 	if err != nil {
@@ -35,6 +54,33 @@ func backfillMain(args []string) error {
 		Root: root, Store: s, Runner: extract.Claude{},
 		Repo: hook.Repo, Now: time.Now, Out: os.Stdout,
 	}, *since, *dry)
+}
+
+// piAgentDir is Pi's configuration directory: $PI_CODING_AGENT_DIR, else
+// ~/.pi/agent.
+func piAgentDir(getenv func(string) string) (string, error) {
+	if dir := getenv("PI_CODING_AGENT_DIR"); dir != "" {
+		return dir, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".pi", "agent"), nil
+}
+
+// piSessionsDir is where Pi stores sessions: $PI_CODING_AGENT_SESSION_DIR,
+// else sessions/ in its configuration directory. A sessionDir setting or
+// --session-dir is not followed.
+func piSessionsDir(getenv func(string) string) (string, error) {
+	if dir := getenv("PI_CODING_AGENT_SESSION_DIR"); dir != "" {
+		return dir, nil
+	}
+	dir, err := piAgentDir(getenv)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "sessions"), nil
 }
 
 // projectsDir is Claude Code's projects directory: under CLAUDE_CONFIG_DIR
@@ -52,12 +98,16 @@ func projectsDir(getenv func(string) string) (string, error) {
 
 // backfillDeps are backfill's collaborators, replaceable in tests.
 type backfillDeps struct {
-	Root   string // Claude Code's projects directory
-	Store  *store.Store
-	Runner extract.Runner
-	Repo   func(cwd string) (project, branch string)
-	Now    func() time.Time
-	Out    io.Writer
+	Root  string // the agent's transcripts: Claude Code's projects directory
+	Store *store.Store
+	// Agent is whose transcripts Root holds; the zero Agent is Claude.
+	Agent agent.Agent
+	// Runner extracts every turn; when nil, RunnerFor gives one per turn.
+	Runner    extract.Runner
+	RunnerFor func(extract.ModelChoice) extract.Runner
+	Repo      func(cwd string) (project, branch string)
+	Now       func() time.Time
+	Out       io.Writer
 }
 
 // backfillTimeout bounds one session's extraction.
@@ -74,6 +124,10 @@ const maxFailures = 2
 // It returns an error if any extraction failed, and stops at once on a
 // store error. A failed session stays unknown, so the next run retries it.
 func backfill(d backfillDeps, since time.Duration, dry bool) error {
+	a := d.Agent
+	if a.LastTurn == nil {
+		a = agent.Claude
+	}
 	// One level down only: subagent transcripts live deeper.
 	files, err := filepath.Glob(filepath.Join(d.Root, "*", "*.jsonl"))
 	if err != nil {
@@ -89,7 +143,7 @@ func backfill(d backfillDeps, since time.Duration, dry bool) error {
 		if fi, err := os.Stat(f); err != nil || fi.ModTime().Before(cutoff) {
 			continue
 		}
-		turn, ok, err := transcript.LastTurn(f)
+		turn, ok, err := a.LastTurn(f)
 		if err != nil {
 			fmt.Fprintf(d.Out, "skipped %s: %v\n", f, err)
 			continue
@@ -113,7 +167,7 @@ func backfill(d backfillDeps, since time.Duration, dry bool) error {
 		// Sessions in temp dirs (/private/var/folders, /private/tmp) are
 		// throwaway runs whose directory may be gone by now. Said once per
 		// directory, so a session that matters can be resumed by hand.
-		if dir := filepath.Base(filepath.Dir(f)); strings.HasPrefix(dir, "-private") {
+		if dir := filepath.Base(filepath.Dir(f)); a.Throwaway(dir) {
 			if !skippedDirs[dir] {
 				skippedDirs[dir] = true
 				fmt.Fprintf(d.Out, "skipped %s (temp dir)\n", dir)
@@ -123,14 +177,24 @@ func backfill(d backfillDeps, since time.Duration, dry bool) error {
 		sessions++
 		// Where the conversation started, as the Stop hook works it out:
 		// claude --resume needs it, and the agent may have moved since.
-		launch := transcript.LaunchDir(f, turn.Cwd)
+		launch := a.LaunchDir(f, turn.Cwd)
 		project, branch := d.Repo(launch)
-		fmt.Fprintf(d.Out, "%s  %-14s %s\n", turn.Time.Local().Format("Jan 02"), project, rexctl.Short(turn.SessionID))
+		fmt.Fprintf(d.Out, "%s  %-14s %s\n", turn.Time.Local().Format("Jan 02"), project, a.ShortID(turn.SessionID))
 		if dry {
 			continue
 		}
+		runner := d.Runner
+		if runner == nil {
+			c := extract.ModelChoice{Provider: turn.Provider, Session: turn.Model}
+			if a.ModelSetting != "" {
+				if c.Configured, err = d.Store.Setting(a.ModelSetting); err != nil {
+					return err
+				}
+			}
+			runner = d.RunnerFor(c)
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), backfillTimeout)
-		res, err := extract.Extract(ctx, d.Runner, extract.Input{Message: turn.Final, Prompt: turn.Prompt})
+		res, err := extract.Extract(ctx, runner, extract.Input{Message: turn.Final, Prompt: turn.Prompt})
 		cancel()
 		if err != nil {
 			fmt.Fprintln(d.Out, "   skipped:", err)
@@ -166,6 +230,7 @@ func backfill(d backfillDeps, since time.Duration, dry bool) error {
 				Cwd: launch, Branch: branch, Project: project,
 				Kind: it.Kind, Title: it.Title, Body: it.Quote, Context: it.Context, Prompt: turn.Prompt,
 				Replies: it.Replies, Suggested: it.Suggested, Images: shots, CreatedAt: turn.Time,
+				Agent: a.ID,
 			})
 		}
 		// Marked even with no items, so the next run doesn't pay again.
@@ -177,7 +242,7 @@ func backfill(d backfillDeps, since time.Duration, dry bool) error {
 		fmt.Fprintf(d.Out, "   %s\n", plural(added, "item"))
 	}
 	if dry {
-		fmt.Fprintf(d.Out, "%s to extract, one claude -p call each\n", plural(sessions, "session"))
+		fmt.Fprintf(d.Out, "%s to extract, one %s -p call each\n", plural(sessions, "session"), a.Command)
 	} else {
 		fmt.Fprintf(d.Out, "%s, %s\n", plural(sessions, "session"), plural(items, "item"))
 	}
