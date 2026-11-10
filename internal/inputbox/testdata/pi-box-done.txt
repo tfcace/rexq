@@ -1,0 +1,24 @@
+ distinctive painted patterns and powerful lights, lighthouses represent
+ humanity's determination to conquer the challenges of the sea.
+
+ The engineering behind lighthouses is remarkable for its era. Early
+ lighthouses relied on open flames, then candles, and eventually the Fresnel
+ lens—a revolutionary invention that used prisms and refraction to project
+ light across vast distances. The engineering challenges of building these
+ structures on unstable coastal terrain required innovation and courage from
+ the builders and the lighthouse keepers who maintained them in isolation.
+
+ Today, most lighthouses have been automated, making the role of the lighthouse
+ keeper a largely historical occupation. Yet these structures remain beloved
+ landmarks, attracting tourists and photographers who appreciate their
+ architectural beauty and historical significance. Many lighthouses now serve
+ as museums, bed-and-breakfasts, or art installations, finding new purposes
+ while maintaining their connection to maritime history.
+
+ Would you like me to write a fourth paragraph about lighthouses?
+
+────────────────────────────────────────────────────────────────────────────────
+
+────────────────────────────────────────────────────────────────────────────────
+/private/tmp/rexq-pi-fx (main)
+↑3.1k ↓324 $0.005 (sub) 1.7%/200k (auto)               claude-haiku-4-5 • medium

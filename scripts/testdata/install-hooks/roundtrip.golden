@@ -1,0 +1,32 @@
+installed rexq's hooks in $DIR/settings.json (backup at $DIR/settings.json.bak-N)
+removed rexq's hooks from $DIR/settings.json (backup at $DIR/settings.json.bak-N)
+{
+  "model": "opus",
+  "statusLine": {
+    "type": "command",
+    "command": "echo é—ok"
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "say done"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "guard"
+          }
+        ]
+      }
+    ]
+  }
+}

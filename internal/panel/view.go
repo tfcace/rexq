@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/tfcace/rexq/internal/agent"
 	"github.com/tfcace/rexq/internal/store"
 )
 
@@ -438,7 +439,7 @@ func (m model) detail(it store.Item, w, h int) string {
 	if len(place) > 0 {
 		sess = append(sess, strings.Join(place, "  ·  "))
 	}
-	sess = append(sess, "claude "+oneLine(it.ClaudeSession))
+	sess = append(sess, agentCommand(it)+" "+oneLine(it.ClaudeSession))
 	if it.RexSession != "" {
 		sess = append(sess, "rex "+oneLine(it.RexSession))
 	}
@@ -579,4 +580,13 @@ func sameDay(a, b time.Time) bool {
 	ay, am, ad := a.Date()
 	by, bm, bd := b.Date()
 	return ay == by && am == bm && ad == bd
+}
+
+// agentCommand names the item's agent by its command, as "claude" names
+// Claude Code.
+func agentCommand(it store.Item) string {
+	if a, ok := agent.ByID(it.Agent); ok {
+		return a.Command
+	}
+	return oneLine(it.Agent)
 }

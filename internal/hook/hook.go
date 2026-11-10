@@ -1,23 +1,31 @@
-// Package hook implements the Claude Code hooks that feed the store.
+// Package hook implements the hooks that feed the store: Claude Code's, and
+// the same three run by rexq's Pi extension, whose input says
+// "agent":"pi". Input without an agent is Claude Code's.
 package hook
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 	"time"
 
+	"github.com/tfcace/rexq/internal/agent"
 	"github.com/tfcace/rexq/internal/extract"
 	"github.com/tfcace/rexq/internal/store"
 )
 
 // Deps are the hook's collaborators, replaceable in tests.
 type Deps struct {
-	Store  *store.Store
+	Store *store.Store
+	// Runner extracts Claude's turns; nil asks agent.Claude.
 	Runner extract.Runner
-	Now    func() time.Time
-	Env    func(string) string
-	Repo   func(cwd string) (project, branch string)
+	// RunnerFor, when set, gives the runner for every agent's turns,
+	// Runner included; nil asks the agent.
+	RunnerFor func(agent.Agent, extract.ModelChoice) extract.Runner
+	Now       func() time.Time
+	Env       func(string) string
+	Repo      func(cwd string) (project, branch string)
 	// Locks serializes the work for one Claude session across processes;
 	// see FileLock.
 	Locks Locker
@@ -41,9 +49,13 @@ func Prompt(d Deps, r io.Reader) error {
 	var in struct {
 		SessionID string `json:"session_id"`
 		Prompt    string `json:"prompt"`
+		Agent     string `json:"agent"`
 	}
 	if err := json.NewDecoder(r).Decode(&in); err != nil {
 		return err
+	}
+	if _, ok := agent.ByID(in.Agent); !ok {
+		return fmt.Errorf("prompt: unknown agent %q", in.Agent)
 	}
 	if in.SessionID == "" {
 		return nil
@@ -60,9 +72,13 @@ func Start(d Deps, r io.Reader) error {
 	}
 	var in struct {
 		SessionID string `json:"session_id"`
+		Agent     string `json:"agent"`
 	}
 	if err := json.NewDecoder(r).Decode(&in); err != nil {
 		return err
+	}
+	if _, ok := agent.ByID(in.Agent); !ok {
+		return fmt.Errorf("start: unknown agent %q", in.Agent)
 	}
 	block := d.Env("REX_BLOCK")
 	if in.SessionID == "" || block == "" {

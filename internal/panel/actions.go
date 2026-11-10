@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/tfcace/rexq/internal/agent"
 	"github.com/tfcace/rexq/internal/rexctl"
 	"github.com/tfcace/rexq/internal/store"
 )
@@ -75,10 +76,14 @@ func (m model) answer(asked store.Item, reply string) tea.Cmd {
 		if it.WrittenSince() {
 			return refuse("you've written to that agent since")
 		}
+		a, ok := agent.ByID(it.Agent)
+		if !ok {
+			return "not sent to " + proj + ": " + unknownAgent(it), nil
+		}
 
 		how, why := rexctl.Resume, ""
 		if it.RexBlock != "" {
-			how, why = m.d.Rex.Choose(ctx, it.RexBlock, reply)
+			how, why = m.d.Rex.ChooseFor(ctx, a, it.RexBlock, reply)
 		}
 		switch how {
 		case rexctl.Refuse:
@@ -93,7 +98,7 @@ func (m model) answer(asked store.Item, reply string) tea.Cmd {
 			case owner != it.ClaudeSession:
 				return "not sent to " + proj + ": that pane now runs a different conversation", nil
 			}
-			if err := m.d.Rex.Send(ctx, it.RexBlock, reply); err != nil {
+			if err := m.d.Rex.SendTo(ctx, a, it.RexBlock, reply); err != nil {
 				if ns := (*rexctl.NotSentError)(nil); errors.As(err, &ns) {
 					return proj + ": " + err.Error() + "; enter jumps there", &it
 				}
@@ -101,9 +106,9 @@ func (m model) answer(asked store.Item, reply string) tea.Cmd {
 			}
 		case rexctl.Resume:
 			if m.d.RexSession == "" {
-				return "not in Rex: run claude --resume " + oneLine(it.ClaudeSession), nil
+				return "not in Rex: run " + oneLine(a.ResumeHint(it.ClaudeSession)), nil
 			}
-			if err := m.d.Rex.Resume(ctx, m.d.RexSession, it.Cwd, it.ClaudeSession, reply); err != nil {
+			if err := m.d.Rex.ResumeAgent(ctx, a, m.d.RexSession, it.Cwd, it.ClaudeSession, reply); err != nil {
 				return "couldn't resume " + proj + ": " + err.Error(), nil
 			}
 		}
@@ -115,20 +120,24 @@ func (m model) answer(asked store.Item, reply string) tea.Cmd {
 }
 
 // jump shows the item's agent: its live pane, or a resumed session when no
-// Claude runs there any more. A live agent is never resumed a second time:
-// when Rex can't tell, or focusing fails while Claude still runs there, it
-// says so instead.
+// agent runs there any more. A live agent is never resumed a second time:
+// when Rex can't tell, or focusing fails while the agent still runs there,
+// it says so instead.
 func (m model) jump(it store.Item) tea.Cmd {
 	return bg(it.ID, func(ctx context.Context) (string, *store.Item) {
+		a, ok := agent.ByID(it.Agent)
+		if !ok {
+			return unknownAgent(it), nil
+		}
 		if it.RexBlock != "" {
-			if toast, resume := m.focus(ctx, it); !resume {
+			if toast, resume := m.focus(ctx, a, it); !resume {
 				return toast, nil
 			}
 		}
 		if m.d.RexSession == "" {
-			return "run: claude --resume " + oneLine(it.ClaudeSession), nil
+			return "run: " + oneLine(a.ResumeHint(it.ClaudeSession)), nil
 		}
-		if err := m.d.Rex.Resume(ctx, m.d.RexSession, it.Cwd, it.ClaudeSession, ""); err != nil {
+		if err := m.d.Rex.ResumeAgent(ctx, a, m.d.RexSession, it.Cwd, it.ClaudeSession, ""); err != nil {
 			return "couldn't resume " + project(it) + ": " + err.Error(), nil
 		}
 		m.d.Rex.HideSelf(ctx)
@@ -138,7 +147,7 @@ func (m model) jump(it store.Item) tea.Cmd {
 
 // focus shows the item's pane and hides the panel. It returns the toast,
 // or resume when the conversation no longer runs there.
-func (m model) focus(ctx context.Context, it store.Item) (toast string, resume bool) {
+func (m model) focus(ctx context.Context, a agent.Agent, it store.Item) (toast string, resume bool) {
 	owner, err := m.d.Store.PaneOwner(it.RexBlock)
 	if err != nil {
 		return "couldn't read the store: " + err.Error(), false
@@ -146,7 +155,7 @@ func (m model) focus(ctx context.Context, it store.Item) (toast string, resume b
 	if owner != "" && owner != it.ClaudeSession {
 		return "", true // the pane runs a different conversation now
 	}
-	_, ok, err := m.d.Rex.ClaudeStatus(ctx, it.RexBlock)
+	_, ok, err := m.d.Rex.AgentStatus(ctx, a, it.RexBlock)
 	switch {
 	case err != nil:
 		return "couldn't reach Rex: " + err.Error(), false
@@ -159,8 +168,14 @@ func (m model) focus(ctx context.Context, it store.Item) (toast string, resume b
 		return "", false
 	}
 	// Resume only if the pane went away in the meantime.
-	if _, ok, err := m.d.Rex.ClaudeStatus(ctx, it.RexBlock); err == nil && !ok {
+	if _, ok, err := m.d.Rex.AgentStatus(ctx, a, it.RexBlock); err == nil && !ok {
 		return "", true
 	}
 	return "couldn't jump to " + project(it) + ": " + ferr.Error(), false
+}
+
+// unknownAgent says an item names an agent this rexq doesn't know, which
+// only a newer rexq writes.
+func unknownAgent(it store.Item) string {
+	return "it is from agent " + oneLine(it.Agent) + ", which this rexq doesn't know; update rexq"
 }

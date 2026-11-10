@@ -14,7 +14,7 @@ const MaxAttempts = 5
 
 // RecordPrompt keeps the latest prompt the user sent to a Claude session.
 func (s *Store) RecordPrompt(claudeSession, prompt string, now time.Time) error {
-	_, err := s.db.Exec(`INSERT INTO prompts (claude_session, prompt, updated_at) VALUES (?, ?, ?)
+	_, err := s.db.Exec(`INSERT INTO last_prompts (claude_session, prompt, updated_at) VALUES (?, ?, ?)
 		ON CONFLICT (claude_session) DO UPDATE SET prompt = excluded.prompt, updated_at = excluded.updated_at`,
 		claudeSession, prompt, now.Unix())
 	return err
@@ -23,7 +23,7 @@ func (s *Store) RecordPrompt(claudeSession, prompt string, now time.Time) error 
 // LastPrompt returns the latest prompt of a session, or "".
 func (s *Store) LastPrompt(claudeSession string) (string, error) {
 	var p string
-	err := s.db.QueryRow(`SELECT prompt FROM prompts WHERE claude_session = ?`, claudeSession).Scan(&p)
+	err := s.db.QueryRow(`SELECT prompt FROM last_prompts WHERE claude_session = ?`, claudeSession).Scan(&p)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
@@ -36,7 +36,7 @@ func (s *Store) LastPrompt(claudeSession string) (string, error) {
 // session they know needs no backfill; one backfilled once is done.
 func (s *Store) Known(claudeSession string) (bool, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT (SELECT count(*) FROM prompts WHERE claude_session = ?) +
+	err := s.db.QueryRow(`SELECT (SELECT count(*) FROM last_prompts WHERE claude_session = ?) +
 		(SELECT count(*) FROM items WHERE claude_session = ?) +
 		(SELECT count(*) FROM backfilled WHERE claude_session = ?)`,
 		claudeSession, claudeSession, claudeSession).Scan(&n)

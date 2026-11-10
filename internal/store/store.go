@@ -39,10 +39,11 @@ CREATE TABLE IF NOT EXISTS items (
   snooze_trigger TEXT NOT NULL DEFAULT '',
   answered_with  TEXT NOT NULL DEFAULT '',
   created_at     INTEGER NOT NULL,
+  agent          TEXT NOT NULL DEFAULT '',
   UNIQUE (claude_session, source_msg, seq)
 );
 CREATE INDEX IF NOT EXISTS items_by_session ON items (rex_session, state);
-CREATE TABLE IF NOT EXISTS prompts (
+CREATE TABLE IF NOT EXISTS last_prompts (
   claude_session TEXT PRIMARY KEY,
   prompt         TEXT NOT NULL,
   updated_at     INTEGER NOT NULL
@@ -65,6 +66,10 @@ CREATE TABLE IF NOT EXISTS health (
   last_error_at  INTEGER NOT NULL DEFAULT 0,
   last_ok_at     INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS settings (
+  key            TEXT PRIMARY KEY,
+  value          TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS panes (
   block          TEXT PRIMARY KEY,
   claude_session TEXT NOT NULL,
@@ -74,7 +79,16 @@ CREATE TABLE IF NOT EXISTS panes (
 
 // schemaVersion is the PRAGMA user_version of the schema above. A change
 // to the schema that older binaries can't use raises it.
-const schemaVersion = 1
+//
+// Version 2 added items.agent: "" for Claude Code, "pi" for Pi, and the
+// settings table. A version 1
+// store is migrated by adding the column, so its rows are Claude's, and by
+// renaming the prompts table to last_prompts. Every item query of a
+// version 1 rexq reads prompts, so a version 1 panel that had the store
+// open when it moved on fails to load, rather than show Pi's questions as
+// Claude's and answer them with claude --resume. A version 1 rexq that
+// opens the store anew refuses it for its version.
+const schemaVersion = 2
 
 // ErrNewerStore is returned by Open for a store a newer rexq wrote.
 var ErrNewerStore = errors.New("store was written by a newer rexq")
@@ -195,17 +209,85 @@ func open(dsn string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("%w (schema version %d; this one knows up to %d): update rexq", ErrNewerStore, version, schemaVersion)
 	}
-	stmts := schema
 	if version < schemaVersion {
-		// A new store, or one from before versioning, which has this same
-		// schema. Set only then: every write wakes the panels.
-		stmts += fmt.Sprintf("\nPRAGMA user_version = %d;", schemaVersion)
-	}
-	if _, err := db.Exec(stmts); err != nil {
+		if err := migrate(db); err != nil {
+			db.Close()
+			return nil, err
+		}
+	} else if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return &Store{db: db}, nil
+}
+
+// migrate brings a new store, or one of an older version, to this schema,
+// in one write transaction, so two processes opening an old store at once
+// migrate it once. It sets the version only then: every write wakes the
+// panels.
+func migrate(db *sql.DB) error {
+	// One connection (see open), so BEGIN IMMEDIATE and what follows run
+	// on it. IMMEDIATE takes the write lock first, so the version read
+	// below is the one this migration changes.
+	if _, err := db.Exec("BEGIN IMMEDIATE"); err != nil {
+		return err
+	}
+	done := false
+	defer func() {
+		if !done {
+			db.Exec("ROLLBACK")
+		}
+	}()
+	var version int
+	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return err
+	}
+	if version > schemaVersion {
+		return fmt.Errorf("%w (schema version %d; this one knows up to %d): update rexq", ErrNewerStore, version, schemaVersion)
+	}
+	if version < schemaVersion {
+		// Stores of version 0 (from before versioning) and 1 have the
+		// version 1 schema, or none yet. CREATE TABLE IF NOT EXISTS would
+		// leave a version 1 table as it is, so its changes come first.
+		has := func(q string) (bool, error) {
+			var n int
+			err := db.QueryRow(q).Scan(&n)
+			return n > 0, err
+		}
+		old, err := has(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'prompts'`)
+		if err != nil {
+			return err
+		}
+		if old {
+			if _, err := db.Exec(`ALTER TABLE prompts RENAME TO last_prompts`); err != nil {
+				return err
+			}
+		}
+		items, err := has(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'items'`)
+		if err != nil {
+			return err
+		}
+		agent, err := has(`SELECT count(*) FROM pragma_table_info('items') WHERE name = 'agent'`)
+		if err != nil {
+			return err
+		}
+		if items && !agent {
+			if _, err := db.Exec(`ALTER TABLE items ADD COLUMN agent TEXT NOT NULL DEFAULT ''`); err != nil {
+				return err
+			}
+		}
+		if _, err := db.Exec(schema); err != nil {
+			return err
+		}
+		if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
+			return err
+		}
+	}
+	if _, err := db.Exec("COMMIT"); err != nil {
+		return err
+	}
+	done = true
+	return nil
 }
 
 // isBusy reports whether err is SQLITE_BUSY or one of its extended codes.

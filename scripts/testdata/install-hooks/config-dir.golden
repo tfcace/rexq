@@ -1,0 +1,15 @@
+== run 1: exit 1
+-- stdout
+-- stderr
+install-hooks: $BIN is not valid JSON (Expecting value: line 1 column 1 (char 0)); fix it first
+-- settings.json
+mode -rw-r--r--
+{
+  "model": "opus",
+  "statusLine": {"type": "command", "command": "echo é—ok"},
+  "hooks": {
+    "Stop": [{"hooks": [{"type": "command", "command": "say done"}]}],
+    "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "guard"}]}]
+  }
+}
+-- 0 backups

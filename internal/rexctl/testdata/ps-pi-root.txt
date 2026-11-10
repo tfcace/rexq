@@ -1,0 +1,4 @@
+    1     0 Ss   /sbin/launchd
+ 1553     1 S    /Applications/Rex.app/Contents/MacOS/rex-server
+ 3356  1553 Ss+  pi
+ 9001  3356 S    /bin/bash

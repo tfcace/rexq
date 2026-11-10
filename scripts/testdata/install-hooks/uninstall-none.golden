@@ -1,0 +1,15 @@
+== run 1: exit 0
+-- stdout
+$DIR/settings.json has no rexq hooks
+-- stderr
+-- settings.json
+mode -rw-r--r--
+{
+  "model": "opus",
+  "statusLine": {"type": "command", "command": "echo é—ok"},
+  "hooks": {
+    "Stop": [{"hooks": [{"type": "command", "command": "say done"}]}],
+    "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "guard"}]}]
+  }
+}
+-- 0 backups

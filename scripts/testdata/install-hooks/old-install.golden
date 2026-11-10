@@ -1,0 +1,49 @@
+== run 1: exit 0
+-- stdout
+installed rexq's hooks in $DIR/settings.json (backup at $DIR/settings.json.bak-N)
+-- stderr
+-- settings.json
+mode -rw-r--r--
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$BIN hook stop || true",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "say done"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$BIN hook prompt || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$BIN hook start || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
+-- 1 backups
+backup equals the input: true

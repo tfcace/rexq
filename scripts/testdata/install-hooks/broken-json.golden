@@ -1,0 +1,7 @@
+== run 1: exit 1
+-- stdout
+-- stderr
+install-hooks: $DIR/settings.json is not valid JSON (Expecting property name enclosed in double quotes: line 1 column 2 (char 1)); fix it first
+-- settings.json
+mode -rw-r--r--
+{nope-- 0 backups

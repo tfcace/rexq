@@ -1,0 +1,24 @@
+
+[0m[38;2;210;142;54m[Skills][0m                                                                        
+[0m[38;2;122;131;127m  anatomy, find-skills, hairline-create, plannotator, plannotator-annotate,     [0m
+[0m[38;2;122;131;127mplannotator-compound, plannotator-last, plannotator-review,                     [0m
+[0m[38;2;122;131;127mplannotator-setup-goal, remotion-best-practices, rex[0m                            
+
+
+ [0m[38;2;210;142;54mWarning: Anthropic subscription auth is active. Third-party harness usage      [0m
+ [0m[38;2;210;142;54mdraws from extra usage and is billed per token, not your Claude plan limits.   [0m
+ [0m[38;2;210;142;54mManage extra usage at https://claude.ai/settings/usage. Disable this warning   [0m
+ [0m[38;2;210;142;54min /settings.[0m                                                                  
+
+[0m[48;2;44;46;52m                                                                                [0m
+[0m[48;2;44;46;52m Write three short paragraphs about lighthouses, then end by asking me whether  [0m
+[0m[48;2;44;46;52m I want a fourth. Do not use tools.                                             [0m
+[0m[48;2;44;46;52m                                                                                [0m
+
+ [0m[3m[38;2;145;154;150mThe user is[0m                                                                    
+
+[0m[38;2;117;132;136m── ⠴[0m [0m[38;2;117;132;136mWorking ───────────────────────────────────────────────────────────────────[0m
+[0m[7m [0m                                                                               
+[0m[38;2;117;132;136m────────────────────────────────────────────────────────────────────────────────[0m
+[0m[38;2;122;131;127m/private/tmp/rexq-pi-fx (main)[0m
+[0m[38;2;122;131;127m$0.000 (sub) 1.1%/200k (auto)                          claude-haiku-4-5 • medium[0m

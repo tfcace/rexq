@@ -23,6 +23,9 @@ type Turn struct {
 	// "cli" when interactive, "sdk-cli" under claude -p, "sdk-ts" from the
 	// TypeScript SDK. Empty in transcripts older than the field.
 	Entrypoint string
+	// Provider and Model answered the final message; only Pi's
+	// transcripts say.
+	Provider, Model string
 
 	msgID string // API message id of Final, to join a message split across entries
 }

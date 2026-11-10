@@ -1,0 +1,24 @@
+[Skills]
+  anatomy, find-skills, hairline-create, plannotator, plannotator-annotate,
+plannotator-compound, plannotator-last, plannotator-review,
+plannotator-setup-goal, remotion-best-practices, rex
+
+
+ Warning: Anthropic subscription auth is active. Third-party harness usage
+ draws from extra usage and is billed per token, not your Claude plan limits.
+ Manage extra usage at https://claude.ai/settings/usage. Disable this warning
+ in /settings.
+
+
+ Write three short paragraphs about lighthouses, then end by asking me whether
+ I want a fourth. Do not use tools.
+
+
+ The user is asking me to write three short paragraphs about lighthouses and
+ then ask if
+
+── ⠴ Working ───────────────────────────────────────────────────────────────────
+
+────────────────────────────────────────────────────────────────────────────────
+/private/tmp/rexq-pi-fx (main)
+$0.000 (sub) 1.1%/200k (auto)                          claude-haiku-4-5 • medium

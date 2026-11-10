@@ -1,0 +1,24 @@
+ ▀▀█  v1.5.1
+ █▀ █ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash ·
+ ctrl+o more
+ Press ctrl+o to show full startup help and loaded resources.
+
+ Pi can explain its own features and look up its docs. Ask it how to use or
+ extend Pi.
+
+[Skills]
+  anatomy, find-skills, hairline-create, plannotator, plannotator-annotate,
+plannotator-compound, plannotator-last, plannotator-review,
+plannotator-setup-goal, remotion-best-practices, rex
+
+
+ Warning: Anthropic subscription auth is active. Third-party harness usage
+ draws from extra usage and is billed per token, not your Claude plan limits.
+ Manage extra usage at https://claude.ai/settings/usage. Disable this warning
+ in /settings.
+
+────────────────────────────────────────────────────────────────────────────────
+half typed
+────────────────────────────────────────────────────────────────────────────────
+/private/tmp/rexq-pi-fx (main)
+$0.000 (sub) 0.0%/200k (auto)                          claude-haiku-4-5 • medium

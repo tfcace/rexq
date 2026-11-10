@@ -1,0 +1,12 @@
+    1     0 Ss   /sbin/launchd
+ 1553     1 S    /Applications/Rex.app/Contents/MacOS/rex-server
+ 1881  1478 S    /Users/me/.local/bin/claude
+ 1561  1553 Ss+  /usr/bin/login
+ 1568  1561 S+   -zsh
+ 4100  1568 S+   pi
+ 3356  1553 Ss+  /usr/bin/login
+ 3357  3356 S+   -zsh
+ 3487  3357 Ss+  pi
+ 9001  3487 S    /bin/bash
+ 9002  1553 Ss+  pi
+ 9003  1553 Ss+  pi-rpc

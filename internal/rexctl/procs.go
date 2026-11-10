@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tfcace/rexq/internal/transcript"
+	"github.com/tfcace/rexq/internal/agent"
 )
 
 // process is one line of `ps -A -o pid=,ppid=,stat=,comm=`.
@@ -80,13 +80,6 @@ func (ps processes) tree(root int) []process {
 	return out
 }
 
-// claudeLike reports whether comm is Claude Code: an executable named
-// claude, or the versioned binary it runs as when it's a block's own
-// command (~/.local/share/claude/versions/2.1.319).
-func claudeLike(comm string) bool {
-	return path.Base(comm) == "claude" || strings.Contains(comm, "/claude/versions/")
-}
-
 // atPrompt reports whether tree (from processes.tree) is only a shell
 // waiting at its prompt: the root alone, or login with exactly one child
 // and nothing under it.
@@ -141,21 +134,26 @@ func samePath(p string) string {
 	return p
 }
 
-// ClaudeRunningIn reports whether any Claude Code process on this machine,
-// interactive or headless, runs in cwd. Only Claude-like processes count.
-// When it can't tell, it returns an error.
-//
-// Directories match the way claude --resume finds a conversation: by the
-// name of their folder under ~/.claude/projects. /p/app-demo, /p/app/demo
-// and /p/app.demo share one, so a Claude in any of them counts as running
-// in the others: resuming from one would find the conversation running in
-// another.
+// ClaudeRunningIn reports whether any Claude Code process on this machine
+// runs in cwd. See RunningIn.
 func (r Rex) ClaudeRunningIn(ctx context.Context, cwd string) (bool, error) {
+	return r.RunningIn(ctx, agent.Claude, cwd)
+}
+
+// RunningIn reports whether any process of agent a on this machine,
+// interactive or headless, runs in cwd. Only a's processes count. When it
+// can't tell, it returns an error.
+//
+// Directories match the way the agent resumes a conversation (see
+// Agent.SameProject): for Claude, by the name of their folder under
+// ~/.claude/projects, so /p/app-demo, /p/app/demo and /p/app.demo count as
+// one.
+func (r Rex) RunningIn(ctx context.Context, a agent.Agent, cwd string) (bool, error) {
 	list := r.Procs
 	if list == nil {
 		list = listProcs
 	}
-	claudes, err := claudePids(ctx, list)
+	claudes, err := agentPids(ctx, list, a)
 	if err != nil || len(claudes) == 0 {
 		return false, err
 	}
@@ -165,9 +163,9 @@ func (r Rex) ClaudeRunningIn(ctx context.Context, cwd string) (bool, error) {
 	}
 	out, lerr := lsof(ctx, claudes)
 	cwds := parseCwds(out)
-	want := transcript.ProjectDirName(samePath(cwd))
+	want := samePath(cwd)
 	for _, c := range cwds {
-		if transcript.ProjectDirName(samePath(c)) == want {
+		if a.SameProject(samePath(c), want) {
 			return true, nil
 		}
 	}
@@ -175,7 +173,7 @@ func (r Rex) ClaudeRunningIn(ctx context.Context, cwd string) (bool, error) {
 		return false, nil
 	}
 	// lsof failed: fine only if every Claude it skipped has exited since.
-	again, err := claudePids(ctx, list)
+	again, err := agentPids(ctx, list, a)
 	if err != nil {
 		return false, err
 	}
@@ -187,8 +185,8 @@ func (r Rex) ClaudeRunningIn(ctx context.Context, cwd string) (bool, error) {
 	return false, nil
 }
 
-// claudePids lists the pids of Claude-like processes, in order.
-func claudePids(ctx context.Context, list func(context.Context) ([]byte, error)) ([]int, error) {
+// agentPids lists the pids of a's processes, in order.
+func agentPids(ctx context.Context, list func(context.Context) ([]byte, error), a agent.Agent) ([]int, error) {
 	out, err := list(ctx)
 	if err != nil {
 		return nil, err
@@ -199,7 +197,7 @@ func claudePids(ctx context.Context, list func(context.Context) ([]byte, error))
 	}
 	var pids []int
 	for _, p := range ps {
-		if claudeLike(p.comm) {
+		if a.IsProcess(p.comm) {
 			pids = append(pids, p.pid)
 		}
 	}
