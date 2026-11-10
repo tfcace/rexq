@@ -1,7 +1,5 @@
-== run 1: exit 0
--- stdout
+== run 1
 removed rexq's hooks from $DIR/settings.json (backup at $DIR/settings.json.bak-N)
--- stderr
 -- settings.json
 mode -rw-r--r--
 {

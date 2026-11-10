@@ -1,7 +1,7 @@
-== run 1: exit 0
--- stdout
+== run 1
 installed rexq's hooks in $DIR/settings.json (backup at $DIR/settings.json.bak-N)
--- stderr
+== run 2
+$DIR/settings.json already has rexq's hooks
 -- settings.json
 mode -rw-r--r--
 {

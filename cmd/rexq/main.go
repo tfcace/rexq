@@ -20,6 +20,8 @@ import (
 )
 
 const usage = `usage:
+  rexq install                  set rexq up: Claude Code's hooks and the Rex panel; install pi adds Pi (see rexq install -h)
+  rexq uninstall                take them out again
   rexq hook prompt|start|stop   run as a Claude Code hook, or for the Pi extension (reads hook JSON on stdin)
   rexq panel [--layer]          open the questions panel (--layer: as the Rex floating layer)
   rexq list [-all]              print open questions
@@ -36,6 +38,16 @@ func main() {
 	case "hook":
 		hookMain(os.Args[2:]) // never returns an error: hooks must exit 0
 		return
+	case "install", "uninstall":
+		if len(os.Args) > 2 && (os.Args[2] == "-h" || os.Args[2] == "--help" || os.Args[2] == "help") {
+			fmt.Println(installUsage)
+			return
+		}
+		if os.Args[1] == "install" {
+			err = installMain(os.Args[2:])
+		} else {
+			err = uninstallMain(os.Args[2:])
+		}
 	case "list":
 		err = listMain(os.Args[2:])
 	case "backfill":

@@ -1,4 +1,4 @@
-// rexq Pi extension: installed by scripts/install-hooks.py --pi.
+// rexq Pi extension: installed by rexq install.
 //
 // It runs rexq's hooks for a Pi session the way Claude Code runs them for
 // a Claude one: "start" when a session starts in this pane, "prompt" when
@@ -18,7 +18,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 
-// The installer writes this line.
+// rexq install writes this line.
 const REXQ_BIN = "rexq";
 
 /** How long a start or prompt hook may run before it is killed. */
@@ -137,7 +137,7 @@ const firstLine = (s: string) => (s ?? "").trim().split("\n")[0] ?? "";
 
 /** Runs `rexq config ...` and returns its JSON, or why it couldn't. */
 async function readConfig(pi: ExtensionAPI, opts: Options, ctx: any, verb: "get" | "ask"): Promise<ModelConfig | string> {
-	const missing = `rexq isn't installed at ${opts.bin}: install it and run scripts/install-hooks.py --pi again`;
+	const missing = `rexq isn't installed at ${opts.bin}: install it and run rexq install again`;
 	if (opts.bin.startsWith("/") && !existsSync(opts.bin)) return missing;
 	const args = ["config", verb, "pi-model", "--provider", ctx.model?.provider ?? "", "--session-model", ctx.model?.id ?? ""];
 	if (verb === "get") args.splice(3, 0, "--json");

@@ -70,7 +70,7 @@ func PiAutomatic(provider, session string) string {
 
 // piModel is the shape of a model name: provider/model, where the model id
 // may hold more slashes (openrouter/anthropic/claude-haiku-5.5), without
-// spaces or quotes. install-hooks.py checks the same.
+// spaces or quotes. rexq install pi --model takes the same.
 var piModel = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._:@+~-][A-Za-z0-9._:@+~/-]*$`)
 
 // ValidPiModel reports whether s names a model as provider/model.

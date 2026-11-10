@@ -1,9 +1,8 @@
 -- rexq for Rex: the open-questions tracker as a floating panel that
--- follows you from tab to tab.
+-- follows you from tab to tab. `rexq install` puts this file next to Rex's
+-- init.lua and adds the line that loads it:
 --
--- In init.lua:
---
---   require("rexq").setup{ key = "shift+cmd+i", bin = "/path/to/rexq" }
+--   require("rexq").setup{ key = "shift+cmd+i" }
 --
 -- The key shows the panel floating over the tab you're in. If it is showing
 -- in another tab, it moves here. Pressing the key again hides it. Hiding
@@ -12,12 +11,15 @@
 -- because a block can't move between sessions.
 --
 -- setup takes key (false for no key; the action "rexq_toggle" is always
--- in the command palette), bin (the rexq binary, as `command -v rexq` prints
--- it; default ~/go/bin/rexq) and bounds (the panel's {x, y, w, h} as
--- fractions of the window).
+-- in the command palette), bin (the rexq binary, when it isn't the one that
+-- installed this file) and bounds (the panel's {x, y, w, h} as fractions of
+-- the window).
+
+-- rexq install writes this line.
+local BIN = "rexq"
 
 local M = {
-  bin = os.getenv("HOME") .. "/go/bin/rexq",
+  bin = BIN,
   bounds = { 0.06, 0.05, 0.88, 0.9 },
 }
 

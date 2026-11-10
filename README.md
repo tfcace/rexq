@@ -11,7 +11,7 @@ rexq collects the questions Claude Code and [Pi](https://pi.dev) agents leave fo
 - Claude Code, tested with 2.1.319. rexq uses async `Stop` hooks, `SessionStart` and `UserPromptSubmit` hooks, and `claude -p --safe-mode --json-schema --strict-mcp-config`.
 - Or Pi, tested with 1.5.1, instead of or beside Claude Code (see [Pi](#pi)). Pi sessions don't need Claude Code installed. Running the extension's tests needs Node 23.6 or newer.
 - Rex, tested with build 0.0.1793645657 (2026-11-02). The panel module uses the Lua APIs `rex.action`, `rex.bind` and `rex.session` (`view`, `list_blocks`, `new_block`, `move_block`, `float_block`, `focus_block`, `detach_block`). The binary runs the `rex` CLI: `block inspect`, `block call` (`program_status`, `process`, `title`), `capture`, `send`, `send-key`, `run`, `focus`, `whoami`, `client ls`, `do session.select` and `api call` (`session.view`, `session.detach_block`).
-- `python3` for the hook installer, and `ps` and `lsof` (part of macOS), which the panel uses to find running Claude processes.
+- `ps` and `lsof` (part of macOS), which the panel uses to find running Claude processes.
 - `git` or `jj`, optional: they name an item's project and branch. Without them it's the directory name.
 - `sqlite3`, optional, for troubleshooting.
 
@@ -25,60 +25,47 @@ Every Pi extraction is a billed `pi -p` call, made the same way for each Pi turn
 
 ```sh
 go install github.com/tfcace/rexq/cmd/rexq@latest
-command -v rexq    # the path the Rex module needs below
+rexq install
 ```
 
-The hook installer and the Rex module live in this repository:
+`rexq install` sets up Claude Code and Rex, with the path of the binary you ran it from, and is safe to run again:
 
-```sh
-git clone https://github.com/tfcace/rexq && cd rexq
-python3 scripts/install-hooks.py      # adds the hooks to ~/.claude/settings.json
-```
+- **Claude Code**: adds the hooks to `~/.claude/settings.json` (`$CLAUDE_CONFIG_DIR/settings.json` when that is set). It backs the file up first (or creates it) and leaves other hooks alone.
+- **Rex**: writes the panel's module, `rexq.lua`, next to the `init.lua` Rex reads (`~/.config/rex/`, or `$XDG_CONFIG_HOME/rex/`, or beside the file `REX_CONFIG` names), adds the line that loads it to `init.lua`, and reloads Rex's config.
 
-To build from that checkout instead of `@latest`, run `go install ./cmd/rexq` in it.
+It sets up Claude Code only when it finds it (the command on `PATH`, or its configuration directory), so run it again after installing it. Pi support is experimental and is added only when you ask for it, with `rexq install pi` (see [Pi](#pi)). If `rexq` isn't found after `go install`, its directory (`go env GOPATH`, then `bin`) isn't on your `PATH`: run it as `~/go/bin/rexq install`.
 
-The installer backs up `settings.json` first (or creates it), leaves other hooks alone, and refuses a missing or broken binary. It writes `$CLAUDE_CONFIG_DIR/settings.json` when `CLAUDE_CONFIG_DIR` is set, and uses the `rexq` on `PATH`, else the one `go install` made. Both can be given: `install-hooks.py [settings.json [rexq binary]]`.
-
-The hooks run `claude -p`, so `claude` must be on `PATH` in the environment Claude Code runs hooks in. If it isn't, set `REXQ_CLAUDE` to its full path there.
-
-### The Rex panel
-
-Copy the module next to the `init.lua` Rex reads: `~/.config/rex/`, or `$XDG_CONFIG_HOME/rex/` when that is set, or beside the file `REX_CONFIG` names.
-
-```sh
-mkdir -p ~/.config/rex
-cp rex/rexq.lua ~/.config/rex/
-```
-
-Add this to `init.lua`, with the path `command -v rexq` printed, and reload the config (`rex config reload`):
+`shift+cmd+i` shows the panel over the current tab and hides it again. The action is also in the command palette as "Toggle Agent Questions". For another key, `rexq install --key cmd+j` (or `--no-key`), or edit the line in `init.lua`, which `rexq install` never rewrites:
 
 ```lua
-require("rexq").setup{ key = "shift+cmd+i", bin = "/path/to/rexq" }
+require("rexq").setup{ key = "shift+cmd+i" }
 ```
 
-`shift+cmd+i` shows the panel over the current tab and hides it again. The action is also in the command palette as "Toggle Agent Questions".
+Each part can be installed by itself, and told where to write: `rexq install claude [settings.json]`, `rexq install rex [--dir DIR]`, `rexq install pi [extension file]`. `rexq install -h` lists the rest.
+
+The hooks run `claude -p`, so `claude` must be on `PATH` in the environment Claude Code runs hooks in. If it isn't, set `REXQ_CLAUDE` to its full path there.
 
 ### Pi
 
 > [!WARNING]
 > Pi support is experimental. It is tested with Pi 1.5.1 and an Anthropic login only, replies depend on reading Pi's input box off the screen, and the extension, the `pi-model` setting and the store format may still change.
 
-rexq's Pi extension runs the same three hooks for a Pi session in a Rex pane: when a session starts there, when a prompt you typed reaches the model (not for `/` commands, `!` commands, or input another extension handles), and when Pi settles after a run. Install it with the same script, from the checkout:
+rexq's Pi extension runs the same three hooks for a Pi session in a Rex pane: when a session starts there, when a prompt you typed reaches the model (not for `/` commands, `!` commands, or input another extension handles), and when Pi settles after a run. `rexq install` leaves Pi alone. Add the extension yourself:
 
 ```sh
-python3 scripts/install-hooks.py --pi
+rexq install pi
 ```
 
-It writes `~/.pi/agent/extensions/rexq.ts` (under `PI_CODING_AGENT_DIR` when that is set), with the `rexq` binary's path written into it, found as for Claude. Both can be given: `install-hooks.py --pi [extension file [rexq binary]]`. Run `/reload` in Pi sessions that are already open. It won't overwrite a `rexq.ts` that isn't rexq's.
+It writes `~/.pi/agent/extensions/rexq.ts` (under `PI_CODING_AGENT_DIR` when that is set), with the `rexq` binary's path written into it. Run `/reload` in Pi sessions that are already open. Once it is installed, `rexq install` keeps it up to date, as after an upgrade. It won't overwrite a `rexq.ts` that isn't rexq's.
 
-Extraction runs `pi -p` with no session, extensions, skills, context files or tools, on your Pi login. **Each extraction is a billed call** (see [Cost](#cost)), so the first time rexq runs in Pi it asks which model to use before any is made: the model picker opens by itself once Pi has started. It asks once per rexq store, not per session, even when several Pi sessions start together. Pressing Esc keeps Automatic and says which model that is. Until you answer, Pi turns wait and nothing is extracted; a picker left open (Pi quit or crashed) stops holding them after 10 minutes and isn't shown again. It doesn't open when a model was already set with `rexq config set pi-model` or the installer's `--model`, outside interactive Pi, or when `rexq` is missing.
+Extraction runs `pi -p` with no session, extensions, skills, context files or tools, on your Pi login. **Each extraction is a billed call** (see [Cost](#cost)), so the first time rexq runs in Pi it asks which model to use before any is made: the model picker opens by itself once Pi has started. It asks once per rexq store, not per session, even when several Pi sessions start together. Pressing Esc keeps Automatic and says which model that is. Until you answer, Pi turns wait and nothing is extracted; a picker left open (Pi quit or crashed) stops holding them after 10 minutes and isn't shown again. It doesn't open when a model was already set with `rexq config set pi-model` or `rexq install pi --model`, outside interactive Pi, or when `rexq` is missing.
 
 To change the model later, run `/rexq-model` in Pi: it lists "Automatic" with the model that means for the session you're in, then every model your Pi logins can use, the current choice marked, and confirms the choice with the provider that bills it. The choice is rexq's, kept in its store, so every extraction uses it from then on, retries and backfill included. Outside Pi:
 
 ```sh
 rexq config get pi-model --json                        # the choice, what Automatic is, and whether you were asked
 rexq config set pi-model anthropic/claude-haiku-5-5    # or auto
-python3 scripts/install-hooks.py --pi --model anthropic/claude-haiku-5-5   # the same, while installing
+rexq install pi --model anthropic/claude-haiku-5-5     # the same, while installing
 ```
 
 The model is the first of:
@@ -151,18 +138,18 @@ The directory is created `0700` and the files in it `0600`.
 This version adds Pi and changes the store's format (version 2). The first `rexq` of the new version to open the store migrates it, which keeps every question. An older `rexq` then refuses the store with "store was written by a newer rexq": old hooks log that to `hook.log` and do nothing, and an old `rexq list` or panel won't start. A panel from the old binary that is still open when the store moves on stops loading, with "couldn't read the store: … no such table: prompts" in its footer; it can't mistake a Pi question for a Claude one. So, to upgrade:
 
 1. Hide the panel and quit it: open it and press `ctrl+c`.
-2. Install the new binary (`go install`) and run `python3 scripts/install-hooks.py` again (and `--pi` for Pi).
-3. Reload the Rex config (`rex config reload`); the panel's key starts the new one.
+2. Install the new binary (`go install github.com/tfcace/rexq/cmd/rexq@latest`) and run `rexq install` again.
+3. The panel's key starts the new one.
 
 ## Uninstall
 
 ```sh
-python3 scripts/install-hooks.py --uninstall   # removes only rexq's hooks, with a backup
+rexq uninstall
 ```
 
-It leaves an empty `"hooks": {}` behind if rexq's were the only hooks. For Pi, `python3 scripts/install-hooks.py --pi --uninstall` deletes the extension (only if it is rexq's); `/reload` running Pi sessions. The installer's backups sit beside the settings file as `settings.json.bak-*`; delete them when you no longer need them.
+It removes rexq's hooks from Claude Code's settings (leaving an empty `"hooks": {}` if they were the only ones), the Pi extension, `rexq.lua` and the line in `init.lua` that loads it, and only what is rexq's. `/reload` running Pi sessions. `rexq uninstall claude`, `rex` or `pi` removes one of them.
 
-Then remove the `require("rexq")` line from `init.lua`, delete `rexq.lua` beside it and the `rexq` binary (`command -v rexq`), and if you want the data gone too, `~/.local/state/rex-questions/`.
+It backs up the files it edits, beside them, as `settings.json.bak-*` and `init.lua.bak-*`; delete those when you no longer need them. The `rexq` binary (`command -v rexq`) and the data in `~/.local/state/rex-questions/` stay until you delete them.
 
 ## License
 

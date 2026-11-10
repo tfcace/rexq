@@ -1,7 +1,0 @@
-== run 1: exit 1
--- stdout
--- stderr
-install-hooks: "hooks" in $DIR/settings.json is not an object
--- settings.json
-mode -rw-r--r--
-{"hooks": []}-- 0 backups

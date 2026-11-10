@@ -1,0 +1,5 @@
+== run 1
+error: $DIR/settings.json is not valid JSON (invalid character 'n'); fix it first
+-- settings.json
+mode -rw-r--r--
+{nope-- 0 backups

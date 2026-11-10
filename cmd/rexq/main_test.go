@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"testing"
@@ -157,15 +158,11 @@ func TestHookLogRotatesAndFlattens(t *testing.T) {
 	}
 }
 
-// runInstaller runs scripts/install-hooks.py with args. A non-nil env
-// replaces the environment.
-func runInstaller(t *testing.T, env []string, args ...string) (stdout, stderr string, err error) {
+// runRexq runs the rexq at bin with args. A non-nil env replaces the
+// environment.
+func runRexq(t *testing.T, bin string, env []string, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
-	py, lookErr := exec.LookPath("python3")
-	if lookErr != nil {
-		t.Skip("no python3")
-	}
-	cmd := exec.Command(py, append([]string{"-I", filepath.Join("..", "..", "scripts", "install-hooks.py")}, args...)...)
+	cmd := exec.Command(bin, args...)
 	cmd.Env = env
 	var o, e bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &o, &e
@@ -173,10 +170,11 @@ func runInstaller(t *testing.T, env []string, args ...string) (stdout, stderr st
 	return o.String(), e.String(), err
 }
 
-// installer runs scripts/install-hooks.py on settings with binary.
+// installer runs rexq install claude on settings, for hooks that run
+// binary.
 func installer(t *testing.T, settings, binary string) (stdout, stderr string, err error) {
 	t.Helper()
-	return runInstaller(t, nil, settings, binary)
+	return runRexq(t, rexqBin, nil, "install", "claude", "--bin", binary, settings)
 }
 
 // hookCommands returns the commands of the hooks in the settings at path,
@@ -219,9 +217,9 @@ func linkRexq(t *testing.T, dir string) string {
 	return p
 }
 
-// Without arguments the installer writes $CLAUDE_CONFIG_DIR/settings.json,
+// Without arguments install claude writes $CLAUDE_CONFIG_DIR/settings.json,
 // or ~/.claude/settings.json, creating it when it's missing: no backup of
-// nothing, and only the user may read it. The binary is the rexq on PATH.
+// nothing, and only the user may read it. The binary is the rexq that ran.
 func TestInstallHooksDefaults(t *testing.T) {
 	for _, configDir := range []bool{false, true} {
 		dir := t.TempDir()
@@ -233,7 +231,7 @@ func TestInstallHooksDefaults(t *testing.T) {
 			settings = filepath.Join(dir, "config", "claude", "settings.json")
 			env = append(env, "CLAUDE_CONFIG_DIR="+filepath.Dir(settings))
 		}
-		out, errOut, err := runInstaller(t, env)
+		out, errOut, err := runRexq(t, bin, env, "install", "claude")
 		if err != nil {
 			t.Fatalf("CLAUDE_CONFIG_DIR %v: %v: %s%s", configDir, err, out, errOut)
 		}
@@ -245,7 +243,7 @@ func TestInstallHooksDefaults(t *testing.T) {
 			t.Errorf("CLAUDE_CONFIG_DIR %v: directory not created 0700: %v", configDir, err)
 		}
 		if cs := hookCommands(t, settings)["Stop"]; len(cs) != 1 || cs[0] != bin+" hook stop || true" {
-			t.Errorf("CLAUDE_CONFIG_DIR %v: Stop %q, want the rexq on PATH", configDir, cs)
+			t.Errorf("CLAUDE_CONFIG_DIR %v: Stop %q, want the rexq that ran", configDir, cs)
 		}
 		if backups, _ := filepath.Glob(settings + ".bak-*"); len(backups) != 0 {
 			t.Errorf("CLAUDE_CONFIG_DIR %v: backed up a missing file: %q", configDir, backups)
@@ -256,7 +254,7 @@ func TestInstallHooksDefaults(t *testing.T) {
 			}
 		}
 		// Uninstalling leaves the hooks object, and backs up what it changes.
-		if out, errOut, err := runInstaller(t, env, "--uninstall"); err != nil {
+		if out, errOut, err := runRexq(t, bin, env, "uninstall", "claude"); err != nil {
 			t.Fatalf("uninstall: %v: %s%s", err, out, errOut)
 		}
 		if cs := hookCommands(t, settings); len(cs) != 0 {
@@ -265,49 +263,6 @@ func TestInstallHooksDefaults(t *testing.T) {
 		if backups, _ := filepath.Glob(settings + ".bak-*"); len(backups) != 1 {
 			t.Errorf("uninstall backups: %q", backups)
 		}
-	}
-}
-
-// Without rexq on PATH the installer looks where go install puts it:
-// $(go env GOBIN), else the first $(go env GOPATH)'s bin.
-func TestInstallHooksFindsGoInstalledBinary(t *testing.T) {
-	dir := t.TempDir()
-	goDir := filepath.Join(dir, "fakego")
-	if err := os.MkdirAll(goDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	fakeGo := "#!/bin/sh\ncase \"$2\" in GOBIN) echo \"$FAKE_GOBIN\";; GOPATH) echo \"$FAKE_GOPATH\";; esac\n"
-	if err := os.WriteFile(filepath.Join(goDir, "go"), []byte(fakeGo), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	gobin := filepath.Join(dir, "gobin")
-	gopath := filepath.Join(dir, "gopath")
-	linkRexq(t, gobin)
-	linkRexq(t, filepath.Join(gopath, "bin"))
-	cases := []struct {
-		name, gobin, gopath, want string
-	}{
-		{"GOBIN", gobin, gopath, filepath.Join(gobin, "rexq")},
-		{"GOPATH", "", gopath + ":" + filepath.Join(dir, "other"), filepath.Join(gopath, "bin", "rexq")},
-	}
-	for _, c := range cases {
-		settings := filepath.Join(t.TempDir(), "settings.json")
-		env := []string{"HOME=" + dir, "PATH=" + goDir, "FAKE_GOBIN=" + c.gobin, "FAKE_GOPATH=" + c.gopath}
-		if out, errOut, err := runInstaller(t, env, settings); err != nil {
-			t.Fatalf("%s: %v: %s%s", c.name, err, out, errOut)
-		}
-		if cs := hookCommands(t, settings)["Stop"]; len(cs) != 1 || cs[0] != c.want+" hook stop || true" {
-			t.Errorf("%s: Stop %q, want %s", c.name, cs, c.want)
-		}
-	}
-	// Neither rexq nor go: one line, nothing written.
-	settings := filepath.Join(t.TempDir(), "settings.json")
-	_, errOut, err := runInstaller(t, []string{"HOME=" + dir, "PATH=" + t.TempDir()}, settings)
-	if err == nil || strings.Count(strings.TrimSpace(errOut), "\n") != 0 || !strings.Contains(errOut, "rexq") {
-		t.Errorf("no rexq anywhere: %v %q", err, errOut)
-	}
-	if _, err := os.Stat(settings); !os.IsNotExist(err) {
-		t.Errorf("settings written without a binary: %v", err)
 	}
 }
 
@@ -456,10 +411,10 @@ func TestInstallHooksRefuses(t *testing.T) {
 	}
 }
 
-// uninstaller runs scripts/install-hooks.py --uninstall on settings.
+// uninstaller runs rexq uninstall claude on settings.
 func uninstaller(t *testing.T, settings string) (stdout, stderr string, err error) {
 	t.Helper()
-	return runInstaller(t, nil, "--uninstall", settings)
+	return runRexq(t, rexqBin, nil, "uninstall", "claude", settings)
 }
 
 func TestUninstallHooks(t *testing.T) {
@@ -598,3 +553,254 @@ func TestPanelHidesOnlyAsTheLayer(t *testing.T) {
 		t.Error("unknown flag accepted")
 	}
 }
+
+// rexq install, by itself, sets up Rex and Claude Code when it is here,
+// with this binary's path in both. Pi is added by name only, and kept up
+// to date from then on. rexq uninstall takes all of them out.
+func TestInstallEverything(t *testing.T) {
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	bin := linkRexq(t, filepath.Join(dir, "bin"))
+	// A rex that records its arguments, and no claude or pi on PATH.
+	calls := filepath.Join(dir, "rex-calls")
+	if err := os.WriteFile(filepath.Join(dir, "bin", "rex"), []byte("#!/bin/sh\necho \"$*\" >> \""+calls+"\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"HOME=" + home, "PATH=" + filepath.Dir(bin), "REXQ_DB=" + filepath.Join(dir, "q.db")}
+	settings := filepath.Join(home, ".claude", "settings.json")
+	ext := filepath.Join(home, ".pi", "agent", "extensions", "rexq.ts")
+	module := filepath.Join(home, ".config", "rex", "rexq.lua")
+	initLua := filepath.Join(home, ".config", "rex", "init.lua")
+
+	// Claude Code isn't here: only Rex is set up, and it says so.
+	out, errOut, err := runRexq(t, bin, env, "install", "--key", "cmd+j")
+	if err != nil {
+		t.Fatalf("%v: %s%s", err, out, errOut)
+	}
+	for _, p := range []string{settings, ext} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("%s written for an agent that isn't here", p)
+		}
+	}
+	if !strings.Contains(out, "Claude Code: not found") || strings.Contains(out, "Pi") || !strings.Contains(out, "isn't here yet") {
+		t.Errorf("skipped agents not reported:\n%s", out)
+	}
+	if b, _ := os.ReadFile(module); !strings.Contains(string(b), "local BIN = \""+bin+"\"\n") {
+		t.Errorf("module lacks the binary:\n%.300s", b)
+	}
+	if b, _ := os.ReadFile(initLua); !strings.Contains(string(b), `require("rexq").setup{ key = "cmd+j" }`) {
+		t.Errorf("init.lua: %s", b)
+	}
+	if b, _ := os.ReadFile(calls); string(b) != "config reload\n" {
+		t.Errorf("rex calls: %q", b)
+	}
+
+	// Both agents' directories exist: Claude Code is set up, Pi is only
+	// pointed at, and Rex is left as it is.
+	os.MkdirAll(filepath.Dir(settings), 0o755)
+	os.MkdirAll(filepath.Join(home, ".pi", "agent"), 0o755)
+	out, errOut, err = runRexq(t, bin, env, "install")
+	if err != nil {
+		t.Fatalf("%v: %s%s", err, out, errOut)
+	}
+	if cs := hookCommands(t, settings)["Stop"]; len(cs) != 1 || cs[0] != bin+" hook stop || true" {
+		t.Errorf("Stop %q", cs)
+	}
+	if _, err := os.Stat(ext); !os.IsNotExist(err) {
+		t.Errorf("the Pi extension was installed without being asked for")
+	}
+	if !strings.Contains(out, "`rexq install pi`") || strings.Contains(out, "billed") || !strings.Contains(out, "already loads rexq") {
+		t.Errorf("output:\n%s", out)
+	}
+	if b, _ := os.ReadFile(calls); string(b) != "config reload\n" {
+		t.Errorf("reloaded Rex for nothing: %q", b)
+	}
+
+	// The Pi model goes into the store; a bad one is refused before
+	// anything is written.
+	if out, errOut, err := runRexq(t, bin, env, "install", "pi", "--model", "openai/gpt-5-mini"); err != nil || !strings.Contains(out, "extractions use openai/gpt-5-mini") {
+		t.Errorf("%v: %s%s", err, out, errOut)
+	}
+	if out, _, _ := runRexq(t, bin, env, "config", "get", "pi-model"); strings.TrimSpace(out) != "openai/gpt-5-mini" {
+		t.Errorf("pi-model %q", out)
+	}
+	if b, _ := os.ReadFile(ext); !strings.Contains(string(b), "const REXQ_BIN = \""+bin+"\";") {
+		t.Errorf("extension lacks the binary")
+	}
+	// Once it is installed, a plain install keeps it current: here, after
+	// the binary moved.
+	moved := linkRexq(t, filepath.Join(dir, "bin2"))
+	if out, errOut, err := runRexq(t, moved, env, "install"); err != nil || !strings.Contains(out, "billed") {
+		t.Errorf("%v: %s%s", err, out, errOut)
+	}
+	if b, _ := os.ReadFile(ext); !strings.Contains(string(b), "const REXQ_BIN = \""+moved+"\";") {
+		t.Errorf("a plain install left the installed extension on the old binary")
+	}
+	for _, bad := range [][]string{{"pi", "--model", "haiku"}, {"pi", "--model", ""}, {"--key", "a", "--no-key"}, {"rex", "--key", ""}, {"nope"}, {"claude", "a", "b"}} {
+		if out, errOut, err := runRexq(t, bin, env, append([]string{"install"}, bad...)...); err == nil || out != "" {
+			t.Errorf("install %q: %v %s%s", bad, err, out, errOut)
+		}
+	}
+
+	out, errOut, err = runRexq(t, bin, env, "uninstall")
+	if err != nil {
+		t.Fatalf("%v: %s%s", err, out, errOut)
+	}
+	if cs := hookCommands(t, settings); len(cs) != 0 {
+		t.Errorf("hooks left: %q", cs)
+	}
+	for _, p := range []string{ext, module} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("%s left", p)
+		}
+	}
+	if b, _ := os.ReadFile(initLua); strings.Contains(string(b), "rexq") {
+		t.Errorf("init.lua still has rexq: %s", b)
+	}
+	if !strings.Contains(out, bin) || !strings.Contains(out, dir) {
+		t.Errorf("what's left isn't named:\n%s", out)
+	}
+}
+
+// snapshot describes every file under dir: its path, mode and contents.
+func snapshot(t *testing.T, dir string) string {
+	t.Helper()
+	var b strings.Builder
+	err := filepath.Walk(dir, func(p string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(dir, p)
+		if fi.IsDir() {
+			fmt.Fprintf(&b, "%s/ %v\n", rel, fi.Mode().Perm())
+			return nil
+		}
+		data, err := os.ReadFile(p)
+		fmt.Fprintf(&b, "%s %v\n%s\n", rel, fi.Mode().Perm(), data)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
+}
+
+// Running install again, or uninstall again, changes nothing on disk:
+// no file rewritten, no backup made, Rex not reloaded. A further install
+// and uninstall round ends where the first did, so repeating them never
+// piles anything up.
+func TestInstallAndUninstallAreIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	bin := linkRexq(t, filepath.Join(dir, "bin"))
+	calls := filepath.Join(dir, "rex-calls")
+	if err := os.WriteFile(filepath.Join(dir, "bin", "rex"), []byte("#!/bin/sh\necho \"$*\" >> \""+calls+"\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"HOME=" + home, "PATH=" + filepath.Dir(bin), "REXQ_DB=" + filepath.Join(dir, "state", "q.db")}
+	// Files with things of the user's own in them, in a format that isn't
+	// the installer's.
+	write := func(rel, body string) {
+		p := filepath.Join(home, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(".claude/settings.json", oldSettings)
+	write(".config/rex/init.lua", "rex.bind(\"cmd+x\", \"y\")") // no final newline
+	reloads := func() int {
+		b, _ := os.ReadFile(calls)
+		return strings.Count(string(b), "config reload\n")
+	}
+	run := func(args ...string) string {
+		t.Helper()
+		out, errOut, err := runRexq(t, bin, env, args...)
+		if err != nil {
+			t.Fatalf("rexq %q: %v: %s%s", args, err, out, errOut)
+		}
+		return out
+	}
+	both := func(verb string) {
+		run(verb)
+		if verb == "install" {
+			run("install", "pi", "--model", "openai/gpt-5-mini")
+		}
+	}
+	// repeat runs verb again twice and wants nothing to have changed.
+	repeat := func(verb string) {
+		t.Helper()
+		want, wantReloads := snapshot(t, home), reloads()
+		for i := range 2 {
+			both(verb)
+			if got := snapshot(t, home); got != want {
+				t.Errorf("%s, run %d after the first, changed the files:\n--- before\n%s\n--- after\n%s", verb, i+1, want, got)
+			}
+			if reloads() != wantReloads {
+				t.Errorf("%s, run %d after the first, reloaded Rex", verb, i+1)
+			}
+		}
+	}
+	// state is the files without the backups: those record each real
+	// change, and are the one thing a new round adds.
+	state := func() string {
+		return dropBackups(backupSuffix.ReplaceAllString(snapshot(t, home), ".bak-N"))
+	}
+
+	// The first install upgrades the old hooks in place.
+	both("install")
+	repeat("install")
+	if out := run("config", "get", "pi-model"); strings.TrimSpace(out) != "openai/gpt-5-mini" {
+		t.Errorf("pi-model %q", out)
+	}
+	both("uninstall")
+	repeat("uninstall")
+	clean := state()
+	for _, rel := range []string{".claude/settings.json", ".config/rex/init.lua"} {
+		if b, _ := os.ReadFile(filepath.Join(home, rel)); strings.Contains(string(b), "rexq") {
+			t.Errorf("%s still has rexq in it:\n%s", rel, b)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(home, ".config/rex/init.lua")); string(b) != "rex.bind(\"cmd+x\", \"y\")\n" {
+		t.Errorf("init.lua after uninstall: %q", b)
+	}
+
+	// From there, every round lands on the same files, both ways.
+	installed := ""
+	for round := 2; round <= 3; round++ {
+		both("install")
+		repeat("install")
+		if got := state(); installed == "" {
+			installed = got
+		} else if got != installed {
+			t.Errorf("install round %d differs from the one before:\n--- before\n%s\n--- now\n%s", round, installed, got)
+		}
+		both("uninstall")
+		repeat("uninstall")
+		if got := state(); got != clean {
+			t.Errorf("uninstall round %d differs from the first:\n--- first\n%s\n--- now\n%s", round, clean, got)
+		}
+	}
+}
+
+var backupSuffix = regexp.MustCompile(`\.bak-[0-9]+`)
+
+// dropBackups removes the backup files' entries from a snapshot.
+func dropBackups(snap string) string {
+	var kept []string
+	skip := false
+	for _, line := range strings.Split(snap, "\n") {
+		if isEntry := entryLine.MatchString(line); isEntry {
+			skip = strings.Contains(line, ".bak-N")
+		}
+		if !skip {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "\n")
+}
+
+// entryLine matches a snapshot line that starts a file or directory.
+var entryLine = regexp.MustCompile(`^\S+ -[rwx-]{9}$`)

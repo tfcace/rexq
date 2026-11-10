@@ -1,33 +1,40 @@
-== run 1: exit 0
--- stdout
+== run 1
 installed rexq's hooks in $DIR/settings.json (backup at $DIR/settings.json.bak-N)
--- stderr
 -- settings.json
 mode -rw-r--r--
 {
+  "model": "opus",
+  "statusLine": {
+    "type": "command",
+    "command": "echo é—ok"
+  },
   "hooks": {
     "Stop": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "$BIN hook stop || true",
-            "async": true
-          },
-          {
-            "type": "command",
             "command": "say done"
           }
         ]
-      }
-    ],
-    "UserPromptSubmit": [
+      },
       {
         "hooks": [
           {
             "type": "command",
-            "command": "$BIN hook prompt || true",
-            "timeout": 5
+            "command": "$BIN hook stop || true",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "guard"
           }
         ]
       }
@@ -38,6 +45,17 @@ mode -rw-r--r--
           {
             "type": "command",
             "command": "$BIN hook start || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$BIN hook prompt || true",
             "timeout": 5
           }
         ]
